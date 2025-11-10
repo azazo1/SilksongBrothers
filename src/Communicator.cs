@@ -86,7 +86,7 @@ public class Communicator
         {
             if (State == CommunicatorState.Quit) return;
             State = CommunicatorState.Disconnected;
-            SilksongBrothersPlugin.SpawnPopup($"Failed to connected to server: {e}.", Color.red);
+            SilksongBrothersPlugin.SpawnPopup($"Failed to connect to server: {e}.", Color.red);
         };
     }
 
