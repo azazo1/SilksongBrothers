@@ -66,18 +66,4 @@
         <Exec Command="dotnet tool restore"/>
         <Exec Command="dotnet tcli build --config-path &quot;$(ThunderstoreDir)/thunderstore.toml&quot; --package-name &quot;$(AssemblyTitle)&quot; --package-version $(Version)" StandardOutputImportance="High" StandardErrorImportance="High"/>
     </Target>
-    <!--将依赖的 dll 文件复制到输出文件夹-->
-    <Target Name="CopySpecificDependencies" AfterTargets="Build">
-        <ItemGroup>
-            <FileToCopy Include="$(NuGetPackageRoot)memorypack.core\**\MemoryPack.Core.dll"
-                        Condition="'$(TargetFramework)' != ''"/>
-            <FileToCopy Include="$(NuGetPackageRoot)\**\System.Collections.Immutable.dll"
-                        Condition="'$(TargetFramework)' != ''"/>
-        </ItemGroup>
-
-        <Copy SourceFiles="@(FileToCopy)"
-              DestinationFolder="$(OutDir)"
-              SkipUnchangedFiles="true"
-              Condition="Exists('%(FileToCopy.Identity)')"/>
-    </Target>
 </Project>
