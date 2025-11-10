@@ -1,32 +1,79 @@
 using System;
 using BepInEx;
 using HarmonyLib;
+using HutongGames.PlayMaker.Actions;
+using SilksongBrothers.Components;
 using SilksongBrothers.Network;
 using Unity.TLS.LowLevel;
+using UnityEngine;
+using UnityEngine.InputForUI;
+using UnityEngine.PlayerLoop;
 
 namespace SilksongBrothers;
 
-[BepInAutoPlugin(id: "io.github.azazo1.silksongbrothers", "SilksongBrothers")]
+[BepInAutoPlugin(id: Constants.ModId, name: Constants.ModName)]
 public partial class SilksongBrothersPlugin : BaseUnityPlugin
 {
-    private Communicator _communicator;
+    public static SilksongBrothersPlugin? Instance { get; private set; }
+    public Communicator? Communicator;
+    public PopupTextManager PopupTextManager;
 
     private void Awake()
     {
+        Instance = this;
         Utils.Logger = Logger;
         // Put your initialization logic here
         var version = Utils.Version;
         Logger.LogInfo($"Plugin {Name}:{version} ({Id}) has loaded!");
         ModConfig.Bind(Config);
         new Harmony("io.github.azazo1.silksongbrothers").PatchAll();
+        gameObject.AddComponent<MenuButton>();
+        // 添加了 canvas 之后才能在屏幕中显示文字.
+        var cv = gameObject.AddComponent<Canvas>();
+        cv.renderMode = RenderMode.ScreenSpaceCamera;
+        PopupTextManager = gameObject.AddComponent<PopupTextManager>();
+    }
 
-        _communicator = new Communicator();
+    public void ToggleMultiplayer()
+    {
+        if (Communicator?.Alive != true)
+        {
+            SpawnPopup("Communicator connecting...");
+            Communicator = new Communicator();
+        }
+        else
+        {
+            SpawnPopup("Communicator quitting...");
+            Communicator.Quit();
+            Communicator = null;
+        }
+    }
+
+    private void Update()
+    {
+        if (Input.GetKeyDown(ModConfig.MultiplayerToggleKey))
+        {
+            ToggleMultiplayer();
+        }
+
+        Communicator?.Update();
+        // todo 开关 standalone server
     }
 
     private void OnDestroy()
     {
-        _communicator.Quit();
+        Communicator?.Quit();
+        Communicator = null;
         Logger.LogInfo($"Plugin {Name} has been destroyed!");
         Utils.Logger = null;
+        Instance = null;
+    }
+
+    public static void SpawnPopup(string text, Color color = default)
+    {
+        if (!Instance) return;
+        if (!Instance.PopupTextManager) return;
+        Utils.Logger?.LogInfo($"Spawn popup: {text.TrimEnd()}");
+        Instance.PopupTextManager.SpawnPopup(text, color);
     }
 }

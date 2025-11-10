@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace SilksongBrothers.Network;
+namespace SilksongBrothers;
 
 public class Peer(string id, string name)
 {
@@ -22,16 +22,18 @@ public class PeerRegistry
     /// </summary>
     private readonly Dictionary<string, Peer> _peers = [];
 
-    public void AddPeer(string id, string name)
+    public bool AddPeer(string id, string name)
     {
         if (_peers.TryGetValue(id, out var peer))
         {
             peer.Name = name;
             _peers[id] = peer;
+            return false;
         }
         else
         {
             _peers[id] = new Peer(id, name);
+            return true;
         }
     }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Sockets;
@@ -20,22 +21,47 @@ public class StandaloneConnection : IConnection
     private readonly Dictionary<Type, Action<Packet>> _handlers = new();
 
     public bool Connected => _client?.Connected ?? false;
+    public Action OnConnected { get; set; } = () => { };
+    public Action<string> OnConnectFailed { get; set; } = _ => { };
 
     /// <summary>
     /// 接收线程放入 packet, 在 <see cref="Update"/> 获取.
     /// </summary>
     private readonly Queue<Packet> _rxQueue = new();
 
+    private readonly BlockingCollection<Packet> _txQueue = new();
+
     public void Establish()
     {
+        if (Connected)
+        {
+            return;
+        }
+
         var parts = ModConfig.StandaloneServerAddress.Split(":", StringSplitOptions.RemoveEmptyEntries);
         var hostname = parts[0];
         var port = int.Parse(parts[1]);
-        _client = new TcpClient(hostname, port);
-        _stream = _client.GetStream();
+        try
+        {
+            _client = new TcpClient(hostname, port);
+            _stream = _client.GetStream();
+        }
+        catch (SocketException e)
+        {
+            OnConnectFailed.Invoke(e.Message);
+            return;
+        }
+
+        OnConnected.Invoke();
 
         Task.Factory.StartNew(
             RxTask,
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default
+        );
+        Task.Factory.StartNew(
+            TxTask,
             CancellationToken.None,
             TaskCreationOptions.LongRunning,
             TaskScheduler.Default
@@ -50,18 +76,9 @@ public class StandaloneConnection : IConnection
         _stream = null;
     }
 
-    public void Send<T>(T packet, string[]? dstPeers, bool realtime = false) where T : Packet
+    public void Send<T>(T packet) where T : Packet
     {
-        var stream = _stream;
-        if (stream == null)
-        {
-            return;
-        }
-
-        var buf = MemoryPackSerializer.Serialize(packet);
-        var lenBuf = buf.Length.ToLsbBytes();
-        stream.Write(lenBuf, 0, lenBuf.Length);
-        stream.Write(buf, 0, buf.Length);
+        _txQueue.Add(packet);
     }
 
     public Action<Packet> AddHandler<T>(Action<T> handler) where T : Packet
@@ -106,7 +123,8 @@ public class StandaloneConnection : IConnection
         _handlers.Clear();
     }
 
-    private async Task RxTask()
+    // 使用异步函数的话会导致什么什么状态机成员 Packet 无法加载的报错, 很奇怪, 不用了.
+    private void RxTask()
     {
         var lenBuf = new byte[8];
         var read = 0;
@@ -125,10 +143,10 @@ public class StandaloneConnection : IConnection
             }
 
             // 读取数据包长度.
-            read += await stream.ReadAsync(lenBuf);
+            read += stream.Read(lenBuf);
             while (read < 8)
             {
-                read += await stream.ReadAsync(lenBuf.AsMemory(read, lenBuf.Length - read));
+                read += stream.Read(lenBuf, read, lenBuf.Length - read);
             }
 
             read = 0;
@@ -143,7 +161,7 @@ public class StandaloneConnection : IConnection
                 var buf = new byte[4096];
                 while (pendingRead > 0)
                 {
-                    pendingRead -= await stream.ReadAsync(buf.AsMemory(0, Math.Min(buf.Length, pendingRead)));
+                    pendingRead -= stream.Read(buf, 0, Math.Min(buf.Length, pendingRead));
                 }
 
                 continue;
@@ -153,7 +171,7 @@ public class StandaloneConnection : IConnection
             var data = new byte[len];
             while (pendingRead > 0)
             {
-                pendingRead -= await stream.ReadAsync(data.AsMemory(len - pendingRead, pendingRead));
+                pendingRead -= stream.Read(data, len - pendingRead, pendingRead);
             }
 
             // 解包
@@ -166,6 +184,19 @@ public class StandaloneConnection : IConnection
             {
                 Utils.Logger?.LogError("Client rx thread received invalid bytes to deserialize packet");
             }
+        }
+    }
+
+    private void TxTask()
+    {
+        while (Connected)
+        {
+            var packet = _txQueue.Take();
+            var buf = MemoryPackSerializer.Serialize(packet);
+            var lenBuf = buf.Length.ToLsbBytes();
+            if (_stream == null) break;
+            _stream.Write(lenBuf);
+            _stream.Write(buf);
         }
     }
 

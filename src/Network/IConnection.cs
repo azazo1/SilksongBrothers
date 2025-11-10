@@ -9,6 +9,8 @@ namespace SilksongBrothers.Network;
 public interface IConnection
 {
     bool Connected { get; }
+    Action OnConnected { get; set; }
+    Action<string> OnConnectFailed { get; set; }
 
     /// <summary>
     /// 建立和服务器的连接.
@@ -23,13 +25,11 @@ public interface IConnection
     void Destroy();
 
     /// <summary>
-    /// 向指定的 peer 发送数据.
+    /// 向指定的 peer 发送数据, 调用此方法不会产生 io 操作, 而是会将 packet 加入发送队列, 即使连接还未建立.
     /// </summary>
     /// 其在内部构建 Packet 并向服务器发送数据.
     /// <param name="packet">负载</param>
-    /// <param name="dstPeers">目标 peer id, 可指定多个, 当为 null 时为广播.</param>
-    /// <param name="realtime">是否是实时包, 见<see cref="Packet.IsRealtime"/></param>
-    void Send<T>(T packet, string[]? dstPeers, bool realtime = false) where T : Packet;
+    void Send<T>(T packet) where T : Packet;
 
     /// <summary>
     /// 添加数据接收处理器.

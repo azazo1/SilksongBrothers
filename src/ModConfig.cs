@@ -12,7 +12,7 @@ public static class ModConfig
 
     // General
     public static KeyCode MultiplayerToggleKey;
-    public static float ToastTime;
+    public static float PopupTextDuration;
     public static string StandalonePeerId = Utils.GeneratePeerId();
     public static KeyCode StandaloneServerToggleKey;
     public static string PlayerName = "player";
@@ -37,7 +37,7 @@ public static class ModConfig
         CompassOpacity = config.Bind("Visuals", "Compass Opacity", 0.7f, "Opacity of other players' compasses.").Value;
 
         MultiplayerToggleKey = config.Bind("General", "Toggle Key", KeyCode.F5, "Key used to toggle multiplayer.").Value;
-        ToastTime = config.Bind("General", "Toast Time", 5.0f, "Time until toast messages hide (set this to 0 to disable toast).").Value;
+        PopupTextDuration = config.Bind("General", "Toast Time", 5.0f, "Time until toast messages hide (set this to 0 to disable toast).").Value;
         PlayerName = config.Bind("General", "Player Name", PlayerName, "你的玩家名, 将会在其他玩家游戏中显示.").Value;
 
         SyncSound = config.Bind("Audio", "Sync Audio", false, "Enable sound sync (experimental).").Value;

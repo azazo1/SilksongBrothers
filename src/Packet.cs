@@ -1,6 +1,8 @@
+using System;
 using MemoryPack;
+using SilksongBrothers.Network;
 
-namespace SilksongBrothers.Network;
+namespace SilksongBrothers;
 
 [MemoryPackable]
 [MemoryPackUnion(0, typeof(PeerQuitPacket))]
@@ -51,6 +53,12 @@ public partial class PeerIdPacket : Packet
     /// 玩家名.
     /// </summary>
     public string Name;
+
+    /// <summary>
+    /// 版本号, 用于检查当前用户和其他用户是否符合版本号要求.
+    /// </summary>
+    /// 只要具有相同的 major 和 minor 版本号, 那么 peers 之间就能兼容.
+    public Version Version = Utils.Version;
 
     /// <summary>
     /// 标记此包是否需要回复, 防止无尽的递归回复.
