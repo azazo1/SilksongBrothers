@@ -1,6 +1,14 @@
+using SilksongBrothers.Network;
+
 namespace SilksongBrothers;
 
 public abstract class Constants
 {
-    public static ushort Port = 14455;
+    public const ushort Port = 14455;
+    public const long MaxPacketLen = 1024 * 1024 * 1;
+
+    /// <summary>
+    /// <see cref="IConnection.Update"/> 单次执行最大允许的时间(软性).
+    /// </summary>
+    public const long ConnectionUpdateMaxDuration = 5;
 }
