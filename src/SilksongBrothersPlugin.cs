@@ -10,7 +10,7 @@ public partial class SilksongBrothersPlugin : BaseUnityPlugin
 {
     public static SilksongBrothersPlugin? Instance { get; private set; }
     public Communicator? Communicator;
-    public PopupTextManager PopupTextManager;
+    public PopupTextManager popupTextManager;
 
     private void Awake()
     {
@@ -25,7 +25,7 @@ public partial class SilksongBrothersPlugin : BaseUnityPlugin
         // 添加了 canvas 之后才能在屏幕中显示文字.
         var cv = gameObject.AddComponent<Canvas>();
         cv.renderMode = RenderMode.ScreenSpaceCamera;
-        PopupTextManager = gameObject.AddComponent<PopupTextManager>();
+        popupTextManager = gameObject.AddComponent<PopupTextManager>();
     }
 
     public void ToggleMultiplayer()
@@ -66,8 +66,8 @@ public partial class SilksongBrothersPlugin : BaseUnityPlugin
     public static void SpawnPopup(string text, Color color = default)
     {
         if (!Instance) return;
-        if (!Instance.PopupTextManager) return;
+        if (!Instance.popupTextManager) return;
         Utils.Logger?.LogInfo($"Spawn popup: {text.TrimEnd()}");
-        Instance.PopupTextManager.SpawnPopup(text, color);
+        Instance.popupTextManager.SpawnPopup(text, color);
     }
 }
