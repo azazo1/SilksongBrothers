@@ -33,6 +33,17 @@ target = "/"
 # source = "./CHANGELOG.md"
 # target = "/"
 
+[[build.copy]]
+source = "../bin/Debug/netstandard2.1/MemoryPack.Core.dll"
+target = "/"
+
+[[build.copy]]
+source = "../bin/Debug/netstandard2.1/SilksongBrothers.dll"
+target = "/"
+
+[[build.copy]]
+source = "../bin/Debug/netstandard2.1/System.Collections.Immutable.dll"
+target = "/"
 
 [publish]
 repository = "https://thunderstore.io"
