@@ -6,8 +6,6 @@ using UnityEngine;
 
 namespace SilksongBrothers;
 
-// todo sync time
-
 public class Communicator
 {
     private enum CommunicatorState

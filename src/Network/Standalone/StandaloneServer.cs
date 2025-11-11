@@ -8,8 +8,6 @@ using MemoryPack;
 
 namespace SilksongBrothers.Network.Standalone;
 
-// todo fix: bug: 服务器调用 Stop 要等客户端手动关闭才结束, 期望是直接强制关闭连接然后结束.
-
 internal class Peer(string id, TcpClient client)
 {
     public string Id => id;
