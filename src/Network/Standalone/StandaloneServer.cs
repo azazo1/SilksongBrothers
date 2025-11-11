@@ -185,15 +185,18 @@ public class StandaloneServer
                 if (peerQuitPacket.SrcPeer != null) // 无来源的直接丢弃.
                 {
                     _peers.Remove(peerQuitPacket.SrcPeer);
-                    await SendPacket(peerQuitPacket, null);
+                    await SendPacket(peerQuitPacket);
                 }
-
+                break;
+            default:
+                if (packet.SrcPeer == null) break;
+                await SendPacket(packet);
                 break;
         }
     }
 
 
-    private async Task SendPacket(Packet packet, string[]? dstPeer)
+    private async Task SendPacket(Packet packet)
     {
         if (packet.SrcPeer == null) // 无来源的 packet 选择直接抛弃.
         {
@@ -202,6 +205,7 @@ public class StandaloneServer
         }
 
         List<Task> sendHandles = [];
+        var dstPeer = packet.DstPeer;
         if (dstPeer != null)
         {
             foreach (var peerId in dstPeer)

@@ -17,15 +17,12 @@ public class Communicator
     }
 
     private IConnection _connection;
-    private readonly PeerRegistry _peerRegistry = new();
     private volatile CommunicatorState _state = CommunicatorState.Connecting;
     private readonly Throttler _heartBeatThrottler = new(10000);
-    private long? SyncTimePending;
+    private long? _syncTimePending;
     public bool Alive => _state != CommunicatorState.Quit;
 
-#pragma warning disable CS8618
     public Communicator()
-#pragma warning restore CS8618
     {
         Connect();
         SyncPeerId();
@@ -120,24 +117,24 @@ public class Communicator
     private void SyncTime()
     {
         var packet = new SyncTimePacket();
-        SyncTimePending = packet.Time;
+        _syncTimePending = packet.Time;
         _connection.Send(packet);
     }
 
     private void SyncTimeHandler(SyncTimePacket packet)
     {
         long delta;
-        if (SyncTimePending != null)
+        if (_syncTimePending != null)
         {
             // 一趟来回消耗的时间, 其中假设服务器响应时间同步包的时候是这趟来回时间的中点.
-            delta = (long)(packet.Time - ((Utils.Time - SyncTimePending) / 2 + SyncTimePending));
+            delta = (long)(packet.Time - ((Utils.Time - _syncTimePending) / 2 + _syncTimePending));
         }
         else
         {
             delta = packet.Time - Utils.Time;
         }
 
-        SyncTimePending = null;
+        _syncTimePending = null;
 
         Utils.Logger?.LogInfo($"Sync time delta: {delta}");
         Utils.SetTimeOffset(delta);
@@ -153,7 +150,7 @@ public class Communicator
             return;
         }
 
-        if (_peerRegistry.AddPeer(packet.SrcPeer, packet.Name))
+        if (PeerRegistry.AddPeer(packet.SrcPeer, packet.Name))
         {
             Utils.Logger?.LogInfo($"Peer discovered: {packet.Name} (id: {packet.SrcPeer})");
         }
@@ -168,6 +165,6 @@ public class Communicator
     {
         if (_state == CommunicatorState.Quit) return;
         if (packet.SrcPeer == null) return;
-        _peerRegistry.RemovePeer(packet.SrcPeer);
+        PeerRegistry.RemovePeer(packet.SrcPeer);
     }
 }

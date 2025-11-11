@@ -1,47 +1,91 @@
+using System;
 using System.Collections.Generic;
 
 namespace SilksongBrothers;
 
 public class Peer(string id, string name)
 {
-    public string? Scene;
-
     public string Id { get; set; } = id;
 
     public string Name { get; set; } = name;
-
-    // hornet:
-    // position
-    // facing
-    // state (animation 状态)
-    // enemy:
-    // ...
 }
 
-public class PeerRegistry
+public static class PeerRegistry
 {
+    /// <summary>
+    /// 新 peer 加入.
+    /// </summary>
+    private static Action<Peer> OnPeerAdded { get; set; } = _ => { };
+
+    /// <summary>
+    /// peer 名称更新.
+    /// </summary>
+    private static Action<Peer> OnPeerUpdated { get; set; } = _ => { };
+
+    /// <summary>
+    /// peer 被去除.
+    /// </summary>
+    private static Action<Peer> OnPeerRemoved { get; set; } = _ => { };
+
     /// <summary>
     /// peer id => Peer
     /// </summary>
-    private readonly Dictionary<string, Peer> _peers = [];
+    private static readonly Dictionary<string, Peer> Peers = [];
 
-    public bool AddPeer(string id, string name)
+    public static bool AddPeer(string id, string name)
     {
-        if (_peers.TryGetValue(id, out var peer))
+        if (Peers.TryGetValue(id, out var peer))
         {
             peer.Name = name;
-            _peers[id] = peer;
+            Peers[id] = peer;
+            OnPeerUpdated.Invoke(peer);
             return false;
         }
-        else
-        {
-            _peers[id] = new Peer(id, name);
-            return true;
-        }
+
+        peer = new Peer(id, name);
+        Peers[id] = peer;
+        OnPeerAdded.Invoke(peer);
+        return true;
     }
 
-    public void RemovePeer(string id)
+    public static void RemovePeer(string id)
     {
-        _peers.Remove(id);
+        Peers.Remove(id);
+    }
+
+    public static Peer? Query(string id)
+    {
+        Peers.TryGetValue(id, out var peer);
+        return peer;
+    }
+
+    public static void AddPeerAddedHandler(Action<Peer> handler)
+    {
+        OnPeerAdded += handler;
+    }
+
+    public static void AddPeerUpdatedHandler(Action<Peer> handler)
+    {
+        OnPeerUpdated += handler;
+    }
+
+    public static void AddPeerRemovedHandler(Action<Peer> handler)
+    {
+        OnPeerRemoved += handler;
+    }
+
+    public static void RemovePeerAddedHandler(Action<Peer> handler)
+    {
+        OnPeerAdded -= handler;
+    }
+
+    public static void RemovePeerUpdatedHandler(Action<Peer> handler)
+    {
+        OnPeerUpdated -= handler;
+    }
+
+    public static void RemovePeerRemovedHandler(Action<Peer> handler)
+    {
+        OnPeerRemoved -= handler;
     }
 }

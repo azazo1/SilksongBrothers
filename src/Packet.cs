@@ -1,6 +1,7 @@
 using System;
 using MemoryPack;
 using SilksongBrothers.Network;
+using SilksongBrothers.Sync;
 
 namespace SilksongBrothers;
 
@@ -9,6 +10,7 @@ namespace SilksongBrothers;
 [MemoryPackUnion(1, typeof(PeerIdPacket))]
 [MemoryPackUnion(2, typeof(SyncTimePacket))]
 [MemoryPackUnion(3, typeof(HeartbeatPacket))]
+[MemoryPackUnion(4, typeof(HornetPositionPacket))]
 public abstract partial class Packet
 {
     /// <summary>
