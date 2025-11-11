@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using HarmonyLib;
-using MemoryPack;
 using SilksongBrothers.Components;
 using SilksongBrothers.Network;
 using UnityEngine;
@@ -10,29 +8,10 @@ using UnityEngine.SceneManagement;
 
 namespace SilksongBrothers.Sync;
 
-[MemoryPackable]
-public partial class HornetPositionPacket : Packet
-{
-    public string? Scene;
-    public float PosX;
-    public float PosY;
-    public float ScaleX;
-    public float VelocityX;
-    public float VelocityY;
-}
-
-[MemoryPackable]
-public partial class HornetAnimationPacket : Packet
-{
-    public string? CrestName;
-    public string? ClipName;
-}
-
-public class HornetSync : Sync
+public class HornetSync : BaseSync
 {
     protected override float TriggerFrequency => 15.0f;
     private static HornetSync? _instance;
-    private static IConnection? Connection => _instance?._connection;
 
     // self
     private GameObject hornetObject;
@@ -61,12 +40,14 @@ public class HornetSync : Sync
 
     public override void Unbind()
     {
+        base.Unbind();
         PeerRegistry.RemovePeerRemovedHandler(OnPlayerLeave);
         _instance = null;
     }
 
     private void OnPlayerLeave(Peer peer)
     {
+        // 另一方面, 玩家可能是在主界面中加入的, 并没有在游戏内加入.
         if (_playerObjects.TryGetValue(peer.Id, out var playerObject) && playerObject)
             Destroy(playerObject);
     }
@@ -74,7 +55,7 @@ public class HornetSync : Sync
     protected override void Update()
     {
         base.Update();
-        if (_connection?.Connected != true) return;
+        if (Connection?.Connected != true) return;
         try
         {
             if (!hornetObject) hornetObject = GameObject.Find("Hero_Hornet");
@@ -98,7 +79,7 @@ public class HornetSync : Sync
 
     protected override void FixedTrigger()
     {
-        if (_connection?.Connected != true) return;
+        if (Connection?.Connected != true) return;
         SendHornetPositionPacket();
     }
 
@@ -107,7 +88,7 @@ public class HornetSync : Sync
     {
         if (!hornetObject || !hornetRigidbody) return;
 
-        _connection?.Send(new HornetPositionPacket
+        Connection?.Send(new HornetPositionPacket
         {
             Scene = SceneManager.GetActiveScene().name,
             PosX = hornetObject.transform.position.x,
@@ -152,22 +133,20 @@ public class HornetSync : Sync
                 playerAnimator.Library = hornetAnimator.Library;
                 playerAnimator.Play(hornetAnimator.CurrentClip);
 
-                playerInterpolator = playerObject.AddComponent<SimpleInterpolator>();
-                playerInterpolator.SetVelocity(new Vector3(packet.VelocityX, packet.VelocityY, 0));
+                // playerInterpolator = playerObject.AddComponent<SimpleInterpolator>();
+                // playerInterpolator.SetVelocity(new Vector3(packet.VelocityX, packet.VelocityY, 0));
 
                 _playerObjects[peer.Id] = playerObject;
                 _playerSprites[peer.Id] = playerSprite;
                 _playerAnimators[peer.Id] = playerAnimator;
-                _playerInterpolators[peer.Id] = playerInterpolator;
+                // _playerInterpolators[peer.Id] = playerInterpolator;
             }
 
             playerObject.transform.position = new Vector3(packet.PosX, packet.PosY,
                 hornetObject.transform.position.z + 0.001f);
             playerObject.transform.localScale = new Vector3(packet.ScaleX, 1, 1);
             playerObject.SetActive(packet.Scene == SceneManager.GetActiveScene().name);
-            playerInterpolator.SetVelocity(new Vector3(packet.VelocityX, packet.VelocityY, 0));
-            // Utils.Logger?.LogDebug(
-            //     $"Updated position of player {packet.ID} to {packet.Scene}/({packet.PositionX} {packet.PositionY})");
+            // playerInterpolator.SetVelocity(new Vector3(packet.VelocityX, packet.VelocityY, 0));
         }
         catch (Exception e)
         {
@@ -224,11 +203,12 @@ public class HornetSync : Sync
 
                 if (crestName == null || clipName == null) return;
 
-                Connection?.Send(new HornetAnimationPacket
-                {
-                    CrestName = crestName,
-                    ClipName = clipName,
-                });
+                if (_instance)
+                    _instance.Connection?.Send(new HornetAnimationPacket
+                    {
+                        CrestName = crestName,
+                        ClipName = clipName,
+                    });
             }
             catch (Exception e)
             {

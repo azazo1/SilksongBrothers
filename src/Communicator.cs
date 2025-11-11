@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using SilksongBrothers.Network;
 using SilksongBrothers.Network.Standalone;
+using SilksongBrothers.Sync;
 using UnityEngine;
 
 namespace SilksongBrothers;
@@ -20,12 +22,29 @@ public class Communicator
     private volatile CommunicatorState _state = CommunicatorState.Connecting;
     private readonly Throttler _heartBeatThrottler = new(10000);
     private long? _syncTimePending;
+    private readonly List<BaseSync> _syncs = [];
     public bool Alive => _state != CommunicatorState.Quit;
 
     public Communicator()
     {
+        // syncs 的添加要放在 Connect 之前, 因为 SetupHandlers 在 Connect 中.
+        _syncs.Add(SilksongBrothersPlugin.Instance!.gameObject.AddComponent<HornetSync>());
         Connect();
         SyncPeerId();
+        PeerRegistry.AddPeerAddedHandler(OnPeerJoin);
+        PeerRegistry.AddPeerRemovedHandler(OnPeerQuit);
+    }
+
+    private static void OnPeerQuit(Peer peer)
+    {
+        Utils.Logger?.LogInfo($"Peer quit: {peer.Name}({peer.Id})");
+        SilksongBrothersPlugin.SpawnPopup($"Peer quit: {peer.Name}");
+    }
+
+    private static void OnPeerJoin(Peer peer)
+    {
+        Utils.Logger?.LogInfo($"Peer joined: {peer.Name}({peer.Id})");
+        SilksongBrothersPlugin.SpawnPopup($"Peer joined: {peer.Name}");
     }
 
     private void Connect()
@@ -41,6 +60,16 @@ public class Communicator
 
         SetupHandlers();
         Task.Run(_connection.Establish); // 放在另一个线程执行.
+    }
+
+    private void DestroyConnection()
+    {
+        _connection.Destroy();
+
+        foreach (var sync in _syncs)
+        {
+            sync.Unbind();
+        }
     }
 
 
@@ -60,8 +89,21 @@ public class Communicator
     {
         _state = CommunicatorState.Quit;
         _connection.Send(new PeerQuitPacket());
-        _connection.Destroy();
+        DestroyConnection();
+        PeerRegistry.RemovePeerAddedHandler(OnPeerJoin);
+        PeerRegistry.RemovePeerRemovedHandler(OnPeerQuit);
+
+        foreach (var sync in _syncs)
+        {
+            UnityEngine.Object.Destroy(sync);
+        }
+
         Utils.Logger?.LogInfo("Communicator quit.");
+    }
+
+    ~Communicator()
+    {
+        Quit();
     }
 
     private void Reconnect()
@@ -78,11 +120,18 @@ public class Communicator
         _connection.AddHandler<PeerIdPacket>(SyncPeerIdResponseHandler);
         _connection.AddHandler<PeerQuitPacket>(PeerQuitHandler);
         _connection.AddHandler<SyncTimePacket>(SyncTimeHandler);
+
+        foreach (var sync in _syncs)
+        {
+            sync.Bind(_connection);
+        }
+
         _connection.OnConnected += () =>
         {
             if (_state == CommunicatorState.Quit) return;
             _state = CommunicatorState.Connected;
             SyncTime();
+            Utils.Logger?.LogInfo($"You: {ModConfig.PlayerName}({new PeerIdPacket(false).SrcPeer ?? ""})");
             SilksongBrothersPlugin.SpawnPopup("Connected to server.");
         };
         _connection.OnConnectFailed += e =>
@@ -150,10 +199,7 @@ public class Communicator
             return;
         }
 
-        if (PeerRegistry.AddPeer(packet.SrcPeer, packet.Name))
-        {
-            Utils.Logger?.LogInfo($"Peer discovered: {packet.Name} (id: {packet.SrcPeer})");
-        }
+        PeerRegistry.AddPeer(packet.SrcPeer, packet.Name);
 
         if (packet.NeedResponse)
         {

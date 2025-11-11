@@ -11,6 +11,7 @@ namespace SilksongBrothers;
 [MemoryPackUnion(2, typeof(SyncTimePacket))]
 [MemoryPackUnion(3, typeof(HeartbeatPacket))]
 [MemoryPackUnion(4, typeof(HornetPositionPacket))]
+[MemoryPackUnion(5, typeof(HornetAnimationPacket))]
 public abstract partial class Packet
 {
     /// <summary>
@@ -99,6 +100,35 @@ public partial class SyncTimePacket : Packet
 
 /// <summary>
 /// 心跳包, 客户端向服务端发送, 其 DstPeer 会被忽略, 服务端不会将心跳包发送给其他 Peer.
+/// 服务器在一段时间内没收到客户端的数据包的时候会发送一个心跳包测试客户端.
 /// </summary>
 [MemoryPackable]
 public partial class HeartbeatPacket : Packet;
+
+[MemoryPackable]
+public partial class HornetPositionPacket : Packet
+{
+    public string? Scene;
+    public float PosX;
+    public float PosY;
+    public float ScaleX;
+    public float VelocityX;
+    public float VelocityY;
+
+    public HornetPositionPacket()
+    {
+        IsRealtime = true;
+    }
+}
+
+[MemoryPackable]
+public partial class HornetAnimationPacket : Packet
+{
+    public string? CrestName;
+    public string? ClipName;
+
+    public HornetAnimationPacket()
+    {
+        IsRealtime = true;
+    }
+}

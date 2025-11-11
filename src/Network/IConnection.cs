@@ -20,15 +20,17 @@ public interface IConnection
 
     /// <summary>
     /// 断开和服务器的连接.
-    /// </summary>
     /// 断开连接之后仍然可以创建新实例重连,
     /// 在 <see cref="Communicator"/> 中发送 <see cref="PeerQuitPacket"/> 才会删除服务器上此客户端的内容.
+    ///
+    /// 可能需要阻塞等待所有包的发送完毕才能返回.
+    /// </summary>
     void Destroy();
 
     /// <summary>
     /// 向指定的 peer 发送数据, 调用此方法不会产生 io 操作, 而是会将 packet 加入发送队列, 即使连接还未建立.
-    /// </summary>
     /// 其在内部构建 Packet 并向服务器发送数据.
+    /// </summary>
     /// <param name="packet">负载</param>
     void Send<T>(T packet) where T : Packet;
 
@@ -39,8 +41,8 @@ public interface IConnection
 
     /// <summary>
     /// 清除指定的接收处理器.
-    /// </summary>
     /// 需要传入 AddHandler 的返回值, 否则无法正确清除.
+    /// </summary>
     void RemoveHandler<T>(Action<Packet> handler) where T : Packet;
 
     /// <summary>

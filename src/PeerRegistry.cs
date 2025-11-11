@@ -15,17 +15,17 @@ public static class PeerRegistry
     /// <summary>
     /// 新 peer 加入.
     /// </summary>
-    private static Action<Peer> OnPeerAdded { get; set; } = _ => { };
+    private static volatile Action<Peer> _onPeerAdded = _ => { };
 
     /// <summary>
-    /// peer 名称更新.
+    /// peer 名称更新, 回调为新的 Peer 和旧名字.
     /// </summary>
-    private static Action<Peer> OnPeerUpdated { get; set; } = _ => { };
+    private static volatile Action<(Peer, string)> _onPeerRenamed = _ => { };
 
     /// <summary>
     /// peer 被去除.
     /// </summary>
-    private static Action<Peer> OnPeerRemoved { get; set; } = _ => { };
+    private static volatile Action<Peer> _onPeerRemoved = _ => { };
 
     /// <summary>
     /// peer id => Peer
@@ -36,20 +36,23 @@ public static class PeerRegistry
     {
         if (Peers.TryGetValue(id, out var peer))
         {
+            var oldName = peer.Name;
             peer.Name = name;
             Peers[id] = peer;
-            OnPeerUpdated.Invoke(peer);
+            _onPeerRenamed.Invoke((peer, oldName));
             return false;
         }
 
         peer = new Peer(id, name);
         Peers[id] = peer;
-        OnPeerAdded.Invoke(peer);
+        _onPeerAdded.Invoke(peer);
         return true;
     }
 
     public static void RemovePeer(string id)
     {
+        if (!Peers.TryGetValue(id, out var peer)) return;
+        _onPeerRemoved.Invoke(peer);
         Peers.Remove(id);
     }
 
@@ -61,31 +64,31 @@ public static class PeerRegistry
 
     public static void AddPeerAddedHandler(Action<Peer> handler)
     {
-        OnPeerAdded += handler;
+        _onPeerAdded += handler;
     }
 
-    public static void AddPeerUpdatedHandler(Action<Peer> handler)
+    public static void AddPeerRenamedHandler(Action<(Peer, string)> handler)
     {
-        OnPeerUpdated += handler;
+        _onPeerRenamed += handler;
     }
 
     public static void AddPeerRemovedHandler(Action<Peer> handler)
     {
-        OnPeerRemoved += handler;
+        _onPeerRemoved += handler;
     }
 
     public static void RemovePeerAddedHandler(Action<Peer> handler)
     {
-        OnPeerAdded -= handler;
+        _onPeerAdded -= handler;
     }
 
-    public static void RemovePeerUpdatedHandler(Action<Peer> handler)
+    public static void RemovePeerUpdatedHandler(Action<(Peer, string)> handler)
     {
-        OnPeerUpdated -= handler;
+        _onPeerRenamed -= handler;
     }
 
     public static void RemovePeerRemovedHandler(Action<Peer> handler)
     {
-        OnPeerRemoved -= handler;
+        _onPeerRemoved -= handler;
     }
 }

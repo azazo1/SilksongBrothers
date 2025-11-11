@@ -8,6 +8,8 @@ using MemoryPack;
 
 namespace SilksongBrothers.Network.Standalone;
 
+// todo 连接总是莫名其妙关闭但是客户端没察觉到.
+
 internal class Peer(string id, TcpClient client)
 {
     public string Id => id;
@@ -79,11 +81,16 @@ public class StandaloneServer
 {
     // Create 这个操作应该是不产生 io 操作的.
     private volatile TcpListener _listener = TcpListener.Create(ModConfig.StandaloneServerPort);
-    public bool Running { get; private set; }
+    public bool Running => !_cts.IsCancellationRequested;
     public Action<Exception> OnServerCrashed { get; set; } = _ => { };
     private volatile PeerRegistry _peers = new();
     private volatile CancellationTokenSource _cts = new();
     private readonly ConcurrentBag<Task> _taskBag = [];
+
+    public StandaloneServer()
+    {
+        _cts.Cancel(); // 初始是非 Running 状态.
+    }
 
     /// <summary>
     /// 启动服务器, 服务器在新的线程中执行循环.
@@ -99,7 +106,6 @@ public class StandaloneServer
             try
             {
                 _listener.Start();
-                Running = true;
                 await ServerLoop();
             }
             catch (Exception e)
@@ -115,7 +121,6 @@ public class StandaloneServer
     public async Task Stop()
     {
         _cts.Cancel();
-        Running = false;
         _listener.Stop();
         foreach (var client in _peers.Clients)
         {
@@ -145,20 +150,32 @@ public class StandaloneServer
 
     private async Task Serve(TcpClient client)
     {
-        Utils.Logger?.LogDebug($"Server peer connection established: {client.Client.RemoteEndPoint}.");
+        Utils.Logger?.LogDebug(
+            $"Server peer connection established: {client.Client.RemoteEndPoint}({_peers.Query(client) ?? ""}).");
         try
         {
             while (Running && client.Connected)
             {
-                var packet = await client.GetStream().ReceivePacketAsync(_cts.Token);
-                if (packet == null) continue;
-                Utils.Logger?.LogDebug($"Server received packet {packet.GetType().Name}.");
-                _taskBag.Add(HandlePacket(packet, client));
+                var receivePacket = client.GetStream().ReceivePacketAsync(_cts.Token);
+                var task = await Task.WhenAny(receivePacket, Task.Delay(10000));
+                if (task == receivePacket)
+                {
+                    var packet = await receivePacket;
+                    if (packet == null) continue;
+                    Utils.Logger?.LogDebug($"Server received packet {packet.GetType().Name}.");
+                    _taskBag.Add(HandlePacket(packet, client));
+                }
+                else
+                {
+                    // 接收超时则发送心跳包.
+                    await SendPacketToClient(new HeartbeatPacket(), client);
+                }
             }
         }
         catch (Exception e)
         {
-            Utils.Logger?.LogDebug($"Server peer connection {client.Client.RemoteEndPoint} closed: {e.Message}");
+            Utils.Logger?.LogDebug(
+                $"Server peer connection `{client.Client.RemoteEndPoint}`({_peers.Query(client) ?? ""}) closed: {e.Message.TrimEnd()}");
         }
     }
 
@@ -176,7 +193,11 @@ public class StandaloneServer
         {
             case PeerIdPacket peerIdPacket:
                 if (peerIdPacket.SrcPeer != null)
+                {
                     _peers.Update(peerIdPacket.SrcPeer, client);
+                    await SendPacket(peerIdPacket);
+                }
+
                 break;
             case SyncTimePacket:
                 await SendPacketToClient(new SyncTimePacket(), client);
@@ -187,6 +208,9 @@ public class StandaloneServer
                     _peers.Remove(peerQuitPacket.SrcPeer);
                     await SendPacket(peerQuitPacket);
                 }
+
+                break;
+            case HeartbeatPacket:
                 break;
             default:
                 if (packet.SrcPeer == null) break;
@@ -198,9 +222,9 @@ public class StandaloneServer
 
     private async Task SendPacket(Packet packet)
     {
-        if (packet.SrcPeer == null) // 无来源的 packet 选择直接抛弃.
+        if (packet.SrcPeer == null) // 无来源的 packet 选择直接抛弃,
+            // 如果是特殊 packet, 使用 SendPacketToClient 直接发送.
         {
-            Utils.Logger?.LogDebug("Sending packet with ");
             return;
         }
 
@@ -218,9 +242,11 @@ public class StandaloneServer
         }
         else
         {
-            foreach (var client in _peers.Clients)
+            foreach (var peerId in _peers.PeerIds)
             {
-                sendHandles.Add(SendPacketToClient(packet, client));
+                if (peerId == packet.SrcPeer) continue;
+                var peer = _peers.Query(peerId);
+                sendHandles.Add(SendPacketToClient(packet, peer!.Client));
             }
         }
 
@@ -234,7 +260,7 @@ public class StandaloneServer
     {
         if (!client.Connected) return;
         var stream = client.GetStream();
-        Utils.Logger?.LogDebug($"Server received packet {packet.GetType().Name}.");
+        Utils.Logger?.LogDebug($"Server sent packet {packet.GetType().Name}.");
         await stream.SendPacketAsync(packet, _cts.Token);
     }
 }

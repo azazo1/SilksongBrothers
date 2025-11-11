@@ -30,7 +30,10 @@ public class StandaloneConnection : IConnection
     /// </summary>
     private readonly Queue<Packet> _rxQueue = new();
 
-    private readonly BlockingCollection<Packet> _txQueue = new();
+    /// <summary>
+    /// 发送缓冲区, 可放入 null, 用于在最末尾的时候检查是否发送完毕.
+    /// </summary>
+    private readonly BlockingCollection<Packet?> _txQueue = new();
 
     public void Establish()
     {
@@ -76,6 +79,12 @@ public class StandaloneConnection : IConnection
 
     public void Destroy()
     {
+        _txQueue.Add(null); // 添加伪包, 检查发送线程是否将伪包前面的包都发送完毕.
+        while (Connected && _txQueue.Count > 0)
+        {
+            Thread.Sleep(10);
+        }
+
         _connectionCts.Cancel();
         _client.Close();
     }
@@ -145,6 +154,7 @@ public class StandaloneConnection : IConnection
         while (Connected && !_connectionCts.IsCancellationRequested)
         {
             var packet = _txQueue.Take();
+            if (packet == null) continue;
             await stream.SendPacketAsync(packet, _connectionCts.Token);
             Utils.Logger?.LogDebug($"Client sent packet {packet.GetType().Name}.");
         }
