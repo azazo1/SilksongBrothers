@@ -10,9 +10,12 @@ public class Peer(string id, string name)
 
     public string Name { get; set; } = name;
 
+    // hornet:
     // position
     // facing
     // state (animation 状态)
+    // enemy:
+    // ...
 }
 
 public class PeerRegistry

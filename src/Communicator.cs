@@ -1,25 +1,29 @@
 using System;
 using System.Threading.Tasks;
 using SilksongBrothers.Network;
+using SilksongBrothers.Network.Standalone;
 using UnityEngine;
 
 namespace SilksongBrothers;
 
+// todo sync time
+
 public class Communicator
 {
-    public enum CommunicatorState
+    private enum CommunicatorState
     {
         Connecting,
         Connected,
         Disconnected,
-        Reconnecting,
         Quit,
     }
 
     private IConnection _connection;
     private readonly PeerRegistry _peerRegistry = new();
-    public CommunicatorState State { get; private set; } = CommunicatorState.Connecting;
-    public bool Alive => State != CommunicatorState.Quit;
+    private volatile CommunicatorState _state = CommunicatorState.Connecting;
+    private readonly Throttler _heartBeatThrottler = new(10000);
+    private long? SyncTimePending;
+    public bool Alive => _state != CommunicatorState.Quit;
 
 #pragma warning disable CS8618
     public Communicator()
@@ -44,13 +48,14 @@ public class Communicator
         Task.Run(_connection.Establish); // 放在另一个线程执行.
     }
 
+
     public void Update()
     {
-        if (State == CommunicatorState.Quit) return;
-        if (!_connection.Connected && State != CommunicatorState.Connecting &&
-            State != CommunicatorState.Reconnecting)
+        if (_state == CommunicatorState.Quit) return;
+
+        if (_heartBeatThrottler.Tick())
         {
-            Reconnect();
+            _connection.Send(new HeartbeatPacket());
         }
 
         _connection.Update();
@@ -58,7 +63,7 @@ public class Communicator
 
     public void Quit()
     {
-        State = CommunicatorState.Quit;
+        _state = CommunicatorState.Quit;
         _connection.Send(new PeerQuitPacket());
         _connection.Destroy();
         Utils.Logger?.LogInfo("Communicator quit.");
@@ -66,27 +71,38 @@ public class Communicator
 
     private void Reconnect()
     {
-        State = CommunicatorState.Reconnecting;
+        _state = CommunicatorState.Connecting;
         _connection.Destroy();
         Connect();
-        _connection.Send(new PeerIdPacket(false)); // 向服务器和其他 peer 报告自身的 peer id.
+        // 有可能第一次都没连上, 因此还是需要重新发送一次需要回复的 PeerIdPacket.
+        SyncPeerId();
     }
 
     private void SetupHandlers()
     {
         _connection.AddHandler<PeerIdPacket>(SyncPeerIdResponseHandler);
         _connection.AddHandler<PeerQuitPacket>(PeerQuitHandler);
+        _connection.AddHandler<SyncTimePacket>(SyncTimeHandler);
         _connection.OnConnected += () =>
         {
-            if (State == CommunicatorState.Quit) return;
-            State = CommunicatorState.Connected;
+            if (_state == CommunicatorState.Quit) return;
+            _state = CommunicatorState.Connected;
+            SyncTime();
             SilksongBrothersPlugin.SpawnPopup("Connected to server.");
         };
         _connection.OnConnectFailed += e =>
         {
-            if (State == CommunicatorState.Quit) return;
-            State = CommunicatorState.Disconnected;
+            if (_state == CommunicatorState.Quit) return;
+            _state = CommunicatorState.Disconnected;
             SilksongBrothersPlugin.SpawnPopup($"Failed to connect to server: {e}.", Color.red);
+            Reconnect();
+        };
+        _connection.OnConnectionCrashed += e =>
+        {
+            if (_state == CommunicatorState.Quit) return;
+            _state = CommunicatorState.Disconnected;
+            SilksongBrothersPlugin.SpawnPopup($"Connection to server closed: {e}, reconnecting.", Color.yellow);
+            Reconnect();
         };
     }
 
@@ -96,6 +112,37 @@ public class Communicator
     private void SyncPeerId()
     {
         _connection.Send(new PeerIdPacket(true));
+    }
+
+    /// <summary>
+    /// 和服务端同步时间.
+    ///
+    /// 在一趟 SyncTime 来回之间发送多个 SyncTime 包可能导致时间同步紊乱.
+    /// </summary>
+    private void SyncTime()
+    {
+        var packet = new SyncTimePacket();
+        SyncTimePending = packet.Time;
+        _connection.Send(packet);
+    }
+
+    private void SyncTimeHandler(SyncTimePacket packet)
+    {
+        long delta;
+        if (SyncTimePending != null)
+        {
+            // 一趟来回消耗的时间, 其中假设服务器响应时间同步包的时候是这趟来回时间的中点.
+            delta = (long)(packet.Time - ((Utils.Time - SyncTimePending) / 2 + SyncTimePending));
+        }
+        else
+        {
+            delta = packet.Time - Utils.Time;
+        }
+
+        SyncTimePending = null;
+
+        Utils.Logger?.LogInfo($"Sync time delta: {delta}");
+        Utils.SetTimeOffset(delta);
     }
 
     private void SyncPeerIdResponseHandler(PeerIdPacket packet)
@@ -121,7 +168,7 @@ public class Communicator
 
     private void PeerQuitHandler(PeerQuitPacket packet)
     {
-        if (State == CommunicatorState.Quit) return;
+        if (_state == CommunicatorState.Quit) return;
         if (packet.SrcPeer == null) return;
         _peerRegistry.RemovePeer(packet.SrcPeer);
     }

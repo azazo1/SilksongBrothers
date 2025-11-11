@@ -10,7 +10,8 @@ public interface IConnection
 {
     bool Connected { get; }
     Action OnConnected { get; set; }
-    Action<string> OnConnectFailed { get; set; }
+    Action<Exception> OnConnectFailed { get; set; }
+    Action<Exception> OnConnectionCrashed { get; set; }
 
     /// <summary>
     /// 建立和服务器的连接.

@@ -34,15 +34,19 @@ target = "/"
 # target = "/"
 
 [[build.copy]]
-source = "../libs/MemoryPack.Core.dll"
-target = "/"
-
-[[build.copy]]
 source = "../bin/Release/netstandard2.1/SilksongBrothers.dll"
 target = "/"
 
 [[build.copy]]
+source = "../libs/MemoryPack.Core.dll"
+target = "/"
+
+[[build.copy]]
 source = "../libs/System.Collections.Immutable.dll"
+target = "/"
+
+[[build.copy]]
+source = "../libs/System.Runtime.CompilerServices.Unsafe.dll"
 target = "/"
 
 [publish]

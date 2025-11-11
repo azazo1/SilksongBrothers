@@ -7,22 +7,23 @@ using System.Threading;
 using System.Threading.Tasks;
 using MemoryPack;
 
-namespace SilksongBrothers.Network;
+namespace SilksongBrothers.Network.Standalone;
 
 public class StandaloneConnection : IConnection
 {
-    private TcpClient? _client;
-    private NetworkStream? _stream;
+    private volatile TcpClient _client = new();
     private readonly Throttler _realtimeDebugThrottler = new(1000);
+    private CancellationTokenSource _connectionCts = new();
 
     /// <summary>
-    /// PacketType(int) => handlers callback
+    /// PacketType => handlers callback
     /// </summary>
     private readonly Dictionary<Type, Action<Packet>> _handlers = new();
 
-    public bool Connected => _client?.Connected ?? false;
+    public bool Connected => _client.Connected;
     public Action OnConnected { get; set; } = () => { };
-    public Action<string> OnConnectFailed { get; set; } = _ => { };
+    public Action<Exception> OnConnectFailed { get; set; } = _ => { };
+    public Action<Exception> OnConnectionCrashed { get; set; } = _ => { };
 
     /// <summary>
     /// 接收线程放入 packet, 在 <see cref="Update"/> 获取.
@@ -38,31 +39,36 @@ public class StandaloneConnection : IConnection
             return;
         }
 
+        _connectionCts = new CancellationTokenSource();
+
         var parts = ModConfig.StandaloneServerAddress.Split(":", StringSplitOptions.RemoveEmptyEntries);
         var hostname = parts[0];
         var port = int.Parse(parts[1]);
         try
         {
-            _client = new TcpClient(hostname, port);
-            _stream = _client.GetStream();
+            _client.Connect(hostname, port);
         }
         catch (SocketException e)
         {
-            OnConnectFailed.Invoke(e.Message);
+            OnConnectFailed.Invoke(e);
             return;
         }
 
         OnConnected.Invoke();
 
         Task.Factory.StartNew(
-            RxTask,
-            CancellationToken.None,
-            TaskCreationOptions.LongRunning,
-            TaskScheduler.Default
-        );
-        Task.Factory.StartNew(
-            TxTask,
-            CancellationToken.None,
+            async () =>
+            {
+                try
+                {
+                    await Task.WhenAll(RxTask(), TxTask());
+                }
+                catch (Exception e)
+                {
+                    OnConnectionCrashed.Invoke(e);
+                }
+            },
+            _connectionCts.Token,
             TaskCreationOptions.LongRunning,
             TaskScheduler.Default
         );
@@ -70,10 +76,8 @@ public class StandaloneConnection : IConnection
 
     public void Destroy()
     {
-        _client?.Close();
-        _client = null;
-        _stream?.Close();
-        _stream = null;
+        _connectionCts.Cancel();
+        _client.Close();
     }
 
     public void Send<T>(T packet) where T : Packet
@@ -95,7 +99,7 @@ public class StandaloneConnection : IConnection
             _handlers[typeof(T)] += h;
         }
 
-        Utils.Logger?.LogDebug($"Connection handler of {typeof(T).Name} added.");
+        Utils.Logger?.LogDebug($"Client connection handler of {typeof(T).Name} added.");
         return h;
     }
 
@@ -123,80 +127,26 @@ public class StandaloneConnection : IConnection
         _handlers.Clear();
     }
 
-    // 使用异步函数的话会导致什么什么状态机成员 Packet 无法加载的报错, 很奇怪, 不用了.
-    private void RxTask()
+    private async Task RxTask()
     {
-        var lenBuf = new byte[8];
-        var read = 0;
-        if (_stream != null)
+        var stream = _client.GetStream();
+        while (Connected && !_connectionCts.IsCancellationRequested)
         {
-            _stream.ReadTimeout = 1000;
-        }
-
-        while (Connected)
-        {
-            var stream = _stream;
-            if (stream == null)
-            {
-                Utils.Logger?.LogWarning("Client rx thread ended for stream is null.");
-                return;
-            }
-
-            // 读取数据包长度.
-            read += stream.Read(lenBuf);
-            while (read < 8)
-            {
-                read += stream.Read(lenBuf, read, lenBuf.Length - read);
-            }
-
-            read = 0;
-            // 读取数据包.
-            var len = lenBuf.ToLsbInt();
-            var pendingRead = len;
-            if (len > Constants.MaxPacketLen)
-            {
-                Utils.Logger?.LogWarning(
-                    "Client received packet length that is bigger than MaxPacketLen, which might be a hack packet.");
-                // 暂时直接将包消耗, 忽略其内容.
-                var buf = new byte[4096];
-                while (pendingRead > 0)
-                {
-                    pendingRead -= stream.Read(buf, 0, Math.Min(buf.Length, pendingRead));
-                }
-
-                continue;
-            }
-
-            // Utils.Logger?.LogDebug($"Client received packet length: {len}");
-            var data = new byte[len];
-            while (pendingRead > 0)
-            {
-                pendingRead -= stream.Read(data, len - pendingRead, pendingRead);
-            }
-
-            // 解包
-            var packet = MemoryPackSerializer.Deserialize<Packet>(data);
-            if (packet != null)
-            {
-                _rxQueue.Enqueue(packet);
-            }
-            else
-            {
-                Utils.Logger?.LogError("Client rx thread received invalid bytes to deserialize packet");
-            }
+            var packet = await stream.ReceivePacketAsync(_connectionCts.Token);
+            if (packet == null) continue;
+            Utils.Logger?.LogDebug($"Client received packet {packet.GetType().Name}.");
+            _rxQueue.Enqueue(packet);
         }
     }
 
-    private void TxTask()
+    private async Task TxTask()
     {
-        while (Connected)
+        var stream = _client.GetStream();
+        while (Connected && !_connectionCts.IsCancellationRequested)
         {
             var packet = _txQueue.Take();
-            var buf = MemoryPackSerializer.Serialize(packet);
-            var lenBuf = buf.Length.ToLsbBytes();
-            if (_stream == null) break;
-            _stream.Write(lenBuf);
-            _stream.Write(buf);
+            await stream.SendPacketAsync(packet, _connectionCts.Token);
+            Utils.Logger?.LogDebug($"Client sent packet {packet.GetType().Name}.");
         }
     }
 
@@ -213,7 +163,7 @@ public class StandaloneConnection : IConnection
             }
 
             // 过滤超时的实时包.
-            var curTime = Utils.Time;
+            var curTime = Utils.ServerTime;
             if (packet.IsRealtime && curTime - packet.Time > ModConfig.RealtimeTimeout)
             {
                 if (_realtimeDebugThrottler.Tick())
