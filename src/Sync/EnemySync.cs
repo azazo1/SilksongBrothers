@@ -11,7 +11,6 @@ using Object = UnityEngine.Object;
 namespace SilksongBrothers.Sync;
 
 // todo 同步不存在的敌人, 比如玩家 a 打死了, 但是玩家 b 重新进入这个 scene, 那么玩家 a 需要接收玩家 b 新创建的敌人.
-// todo 检查怪物的血量是否能够正常同步.
 
 public class SyncDeadMarker : MonoBehaviour;
 
@@ -331,7 +330,6 @@ public class EnemySync : BaseSync
         // ReSharper disable once InconsistentNaming
         private static void Prefix(HealthManager __instance, ref HitInstance hitInstance)
         {
-            Utils.Logger?.LogDebug("test Hit Prefix"); // todo del
             if (!_instance) return;
             if (_instance.IsHost) return; // 只有非 host 才发送攻击请求.
             var enemyId = EnemyRegistry.GetOrAssignId(__instance.gameObject);
@@ -364,7 +362,6 @@ public class EnemySync : BaseSync
         // ReSharper disable once InconsistentNaming
         private static void Postfix(HealthManager __instance)
         {
-            Utils.Logger?.LogDebug("test Hit Postfix"); // todo del
             if (!_instance) return;
             if (!_instance.IsHost) return; // host 攻击然后同步小怪血量给其他 peer.
             var enemyId = EnemyRegistry.GetOrAssignId(__instance.gameObject);
