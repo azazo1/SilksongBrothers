@@ -4,6 +4,7 @@ namespace SilksongBrothers;
 
 public abstract class Constants
 {
+    public const string ServerId = "[server]";
     public const ushort Port = 14455;
     public const long MaxPacketLen = 1024 * 1024 * 1;
     public const string ModId = "io.github.azazo1.silksongbrothers";

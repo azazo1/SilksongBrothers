@@ -56,8 +56,8 @@ public partial class SilksongBrothersPlugin : BaseUnityPlugin
         }
         else
         {
-            SpawnPopup("Communicator quitting...");
             _communicator?.Quit();
+            SpawnPopup("Communicator quit.");
             _communicator = null;
         }
     }

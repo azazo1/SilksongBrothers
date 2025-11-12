@@ -29,9 +29,10 @@ public class Communicator
     {
         // syncs 的添加要放在 Connect 之前, 因为 SetupHandlers 在 Connect 中.
         _syncs.Add(SilksongBrothersPlugin.Instance!.gameObject.AddComponent<HornetSync>());
+        _syncs.Add(SilksongBrothersPlugin.Instance!.gameObject.AddComponent<EnemySync>());
         Connect();
         SyncPeerId();
-        PeerRegistry.AddPeerAddedHandler(OnPeerJoin);
+        PeerRegistry.AddPeerAddedHandler(OnPeerDiscovered);
         PeerRegistry.AddPeerRemovedHandler(OnPeerQuit);
     }
 
@@ -41,10 +42,10 @@ public class Communicator
         SilksongBrothersPlugin.SpawnPopup($"Peer quit: {peer.Name}");
     }
 
-    private static void OnPeerJoin(Peer peer)
+    private static void OnPeerDiscovered(Peer peer)
     {
-        Utils.Logger?.LogInfo($"Peer joined: {peer.Name}({peer.Id})");
-        SilksongBrothersPlugin.SpawnPopup($"Peer joined: {peer.Name}");
+        Utils.Logger?.LogInfo($"Peer discovered: {peer.Name}({peer.Id})");
+        SilksongBrothersPlugin.SpawnPopup($"Peer discovered: {peer.Name}");
     }
 
     private void Connect()
@@ -64,12 +65,11 @@ public class Communicator
 
     private void DestroyConnection()
     {
-        _connection.Destroy();
-
         foreach (var sync in _syncs)
         {
             sync.Unbind();
         }
+        _connection.Destroy();
     }
 
 
@@ -88,9 +88,8 @@ public class Communicator
     public void Quit()
     {
         _state = CommunicatorState.Quit;
-        _connection.Send(new PeerQuitPacket());
         DestroyConnection();
-        PeerRegistry.RemovePeerAddedHandler(OnPeerJoin);
+        PeerRegistry.RemovePeerAddedHandler(OnPeerDiscovered);
         PeerRegistry.RemovePeerRemovedHandler(OnPeerQuit);
 
         foreach (var sync in _syncs)
@@ -109,7 +108,7 @@ public class Communicator
     private void Reconnect()
     {
         _state = CommunicatorState.Connecting;
-        _connection.Destroy();
+        DestroyConnection();
         Connect();
         // 有可能第一次都没连上, 因此还是需要重新发送一次需要回复的 PeerIdPacket.
         SyncPeerId();
@@ -194,7 +193,7 @@ public class Communicator
         if (packet.SrcPeer == null) return;
         if (packet.Version.Major != Utils.Version.Major || packet.Version.Minor != Utils.Version.Minor)
         {
-            Utils.Logger?.LogInfo($"Version of peer ({packet.Name}) is incompatible, quitting.");
+            Utils.Logger?.LogInfo($"Version of peer ({packet.Name}) is incompatible, quitting...");
             Quit();
             return;
         }
@@ -210,7 +209,6 @@ public class Communicator
     private void PeerQuitHandler(PeerQuitPacket packet)
     {
         if (_state == CommunicatorState.Quit) return;
-        if (packet.SrcPeer == null) return;
-        PeerRegistry.RemovePeer(packet.SrcPeer);
+        PeerRegistry.RemovePeer(packet.QuitPeer);
     }
 }

@@ -16,6 +16,7 @@ public static class ModConfig
     public static string StandalonePeerId = Utils.GeneratePeerId();
     public static KeyCode StandaloneServerToggleKey;
     public static string PlayerName = "player";
+    public static int ServerHostChangeInterval;
 
     // Audio
     public static bool SyncSound;
@@ -39,6 +40,7 @@ public static class ModConfig
         MultiplayerToggleKey = config.Bind("General", "Toggle Key", KeyCode.F5, "Key used to toggle multiplayer.").Value;
         PopupTextDuration = config.Bind("General", "Toast Time", 5.0f, "Time until toast messages hide (set this to 0 to disable toast).").Value;
         PlayerName = config.Bind("General", "Player Name", PlayerName, "你的玩家名, 将会在其他玩家游戏中显示.").Value;
+        ServerHostChangeInterval = config.Bind("General", "Host Change Interval", 15000, "服务端 host 切换间隔(毫秒).").Value;
 
         SyncSound = config.Bind("Audio", "Sync Audio", false, "Enable sound sync (experimental).").Value;
         SyncParticles = config.Bind("Audio", "Sync Particles", false, "Enable particle sync (experimental).").Value;

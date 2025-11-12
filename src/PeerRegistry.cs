@@ -32,7 +32,7 @@ public static class PeerRegistry
     /// </summary>
     private static readonly Dictionary<string, Peer> Peers = [];
 
-    public static bool AddPeer(string id, string name)
+    public static void AddPeer(string id, string name)
     {
         if (Peers.TryGetValue(id, out var peer))
         {
@@ -40,13 +40,11 @@ public static class PeerRegistry
             peer.Name = name;
             Peers[id] = peer;
             _onPeerRenamed.Invoke((peer, oldName));
-            return false;
         }
 
         peer = new Peer(id, name);
         Peers[id] = peer;
         _onPeerAdded.Invoke(peer);
-        return true;
     }
 
     public static void RemovePeer(string id)

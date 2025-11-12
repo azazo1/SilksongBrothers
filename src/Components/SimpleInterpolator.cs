@@ -9,6 +9,8 @@ public class SimpleInterpolator : MonoBehaviour
     private tk2dSprite _sprite;
     private float _opacity = 1.0f;
 
+    private const float OpacityDuration = 3f;
+
     private void Start()
     {
         _sprite = GetComponent<tk2dSprite>();
@@ -18,7 +20,7 @@ public class SimpleInterpolator : MonoBehaviour
     {
         transform.position += _velocity * Time.deltaTime;
 
-        if (_opacity > 0) _opacity -= Time.deltaTime;
+        if (_opacity > 0) _opacity -= Time.deltaTime / OpacityDuration;
         _sprite.color = new Color(1, 1, 1, _opacity);
     }
 

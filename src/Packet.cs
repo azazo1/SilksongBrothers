@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
 using MemoryPack;
 using SilksongBrothers.Network;
-using SilksongBrothers.Sync;
+using UnityEngine;
+
+#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring as nullable.
 
 namespace SilksongBrothers;
 
@@ -12,6 +15,11 @@ namespace SilksongBrothers;
 [MemoryPackUnion(3, typeof(HeartbeatPacket))]
 [MemoryPackUnion(4, typeof(HornetPositionPacket))]
 [MemoryPackUnion(5, typeof(HornetAnimationPacket))]
+[MemoryPackUnion(6, typeof(EnemyPosPacket))]
+[MemoryPackUnion(7, typeof(EnemyHealthPacket))]
+[MemoryPackUnion(8, typeof(EnemyFsmPacket))]
+[MemoryPackUnion(9, typeof(AttackRequestPacket))]
+[MemoryPackUnion(10, typeof(HostPeerPacket))]
 public abstract partial class Packet
 {
     /// <summary>
@@ -23,7 +31,7 @@ public abstract partial class Packet
     /// 是否为实时包.
     /// </summary>
     /// 如果为 true, 那么此包在过期后接收到将被丢弃.
-    [MemoryPackOrder(1)] public bool IsRealtime = false;
+    [MemoryPackOrder(1)] public bool IsRealtime;
 
     /// <summary>
     /// peer id, 目标发送到的 peers.
@@ -35,17 +43,33 @@ public abstract partial class Packet
     /// <summary>
     /// peer id, 来源 peer.
     /// </summary>
-    /// 服务器下发 packet 时会重新写入 SrcPeer 为其来源连接对应的 peer id.
-    ///
-    /// 客户端发送时除了 PeerIdPacket 之外可以不填写.
-    [MemoryPackOrder(3)] public string? SrcPeer;
+    [MemoryPackOrder(3)] public string SrcPeer;
+
+    protected Packet()
+    {
+        if (ModConfig.NetworkMode == NetworkMode.Standalone)
+        {
+            SrcPeer = ModConfig.StandalonePeerId;
+        }
+        else
+        {
+            throw new Exception("Unsupported network mode");
+        }
+    }
 }
 
+/// <summary>
+/// 由服务器下发给各个 peer, 告知某个 peer 的退出.
+/// </summary>
 [MemoryPackable]
-public partial class PeerQuitPacket : Packet;
+public partial class PeerQuitPacket : Packet
+{
+    public string QuitPeer;
+}
 
 /// <summary>
-/// 向其他 peer 和服务端发送自身的 peer id.
+/// 向其他 peer 和服务端发送自身的 peer id (放于 SrcPeer),
+/// 并携带自身 mod 版本号和玩家姓名.
 ///
 /// 此消息可用广播的方式发送.
 ///
@@ -72,11 +96,6 @@ public partial class PeerIdPacket : Packet
 
     public PeerIdPacket(bool needResponse)
     {
-        if (ModConfig.NetworkMode == NetworkMode.Standalone)
-        {
-            SrcPeer = ModConfig.StandalonePeerId;
-        }
-
         Name = ModConfig.PlayerName;
         NeedResponse = needResponse;
     }
@@ -108,10 +127,15 @@ public partial class HeartbeatPacket : Packet;
 [MemoryPackable]
 public partial class HornetPositionPacket : Packet
 {
-    public string? Scene;
+    public string Scene;
     public float PosX;
     public float PosY;
+
+    /// <summary>
+    /// 角色的朝向.
+    /// </summary>
     public float ScaleX;
+
     public float VelocityX;
     public float VelocityY;
 
@@ -124,11 +148,97 @@ public partial class HornetPositionPacket : Packet
 [MemoryPackable]
 public partial class HornetAnimationPacket : Packet
 {
-    public string? CrestName;
-    public string? ClipName;
+    public string CrestName;
+    public string ClipName;
 
     public HornetAnimationPacket()
     {
         IsRealtime = true;
     }
+}
+
+[MemoryPackable]
+public partial class EnemyPosPacket : Packet
+{
+    public string Id;
+    public Vector3 Pos;
+    public string Scene;
+    public string Clip;
+    public bool FacingLeft;
+
+    public EnemyPosPacket()
+    {
+        IsRealtime = true;
+    }
+}
+
+[MemoryPackable]
+public partial class EnemyHealthPacket : Packet
+{
+    public string Id;
+    public string Scene;
+    public bool InCombat;
+    public int Hp;
+    public bool IsDead;
+
+    public EnemyHealthPacket()
+    {
+        IsRealtime = true;
+    }
+}
+
+[MemoryPackable]
+public partial class EnemyFsmPacket : Packet
+{
+    public string Id;
+    public string Scene;
+    public string StateName;
+
+    public EnemyFsmPacket()
+    {
+        IsRealtime = true;
+    }
+}
+
+[MemoryPackable]
+public partial class AttackRequestPacket : Packet
+{
+    public string enemyId;
+    public SimpleHit hit;
+    public string scene;
+
+    [MemoryPackable]
+    public partial class SimpleHit
+    {
+        public int damageDealt;
+        public float direction;
+        public float magnitudeMult;
+        public int attackType;
+        public int nailElement;
+        public bool nonLethal;
+        public bool critical;
+        public bool canWeakHit;
+        public float multiplier;
+        public int damageScalingLevel;
+        public int specialType;
+        public bool isHeroDamage;
+    }
+}
+
+/// <summary>
+/// 客户端向服务端发送此包查询哪个 peer 是 host,
+/// 服务端返回新创建的此包并附上 host 的 peer id 给请求的客户端,
+/// 此情况下服务器不会把请求包发给其他客户端.
+///
+/// 服务器可在内部随时间切换 host peer, 此时服务器会主动广播此包以告知 host 切换.
+///
+/// <see cref="Packet.SrcPeer"/> 和 <see cref="Packet.DstPeer"/> 字段将被忽视.
+/// </summary>
+[MemoryPackable]
+public partial class HostPeerPacket : Packet
+{
+    /// <summary>
+    /// 由服务端设置并发送给客户端.
+    /// </summary>
+    public string? Host;
 }

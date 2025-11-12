@@ -9,6 +9,12 @@ namespace SilksongBrothers.Network;
 public interface IConnection
 {
     bool Connected { get; }
+
+    /// <summary>
+    /// 自身的 Peer Id.
+    /// </summary>
+    string? PeerId { get; }
+
     Action OnConnected { get; set; }
     Action<Exception> OnConnectFailed { get; set; }
     Action<Exception> OnConnectionCrashed { get; set; }
@@ -20,8 +26,6 @@ public interface IConnection
 
     /// <summary>
     /// 断开和服务器的连接.
-    /// 断开连接之后仍然可以创建新实例重连,
-    /// 在 <see cref="Communicator"/> 中发送 <see cref="PeerQuitPacket"/> 才会删除服务器上此客户端的内容.
     ///
     /// 可能需要阻塞等待所有包的发送完毕才能返回.
     /// </summary>

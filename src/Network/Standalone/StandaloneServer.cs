@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
-using MemoryPack;
 
 namespace SilksongBrothers.Network.Standalone;
 
@@ -20,9 +21,31 @@ internal class Peer(string id, TcpClient client)
 internal class PeerRegistry
 {
     private readonly Dictionary<string, Peer> _peers = new();
+    private string? _host;
+
+    public string? Host
+    {
+        get => _host;
+
+        private set
+        {
+            var oldHost = _host;
+            _host = value;
+            Utils.Logger?.LogInfo($"Server host peer changed to {_host}.");
+            if (oldHost != value)
+                OnHostChanged.Invoke((oldHost, _host));
+        }
+    }
+
     private readonly Dictionary<TcpClient, string> _peersRev = new();
     public Dictionary<string, Peer>.KeyCollection PeerIds => _peers.Keys;
     public Dictionary<TcpClient, string>.KeyCollection Clients => _peersRev.Keys;
+
+    /// <summary>
+    /// (旧 Host, 新 Host), 保证调用的时候会有变化.
+    /// </summary>
+    /// <returns></returns>
+    public Action<(string?, string?)> OnHostChanged { get; set; } = _ => { };
 
 
     /// <summary>
@@ -30,6 +53,11 @@ internal class PeerRegistry
     /// </summary>
     public void Update(string id, TcpClient client)
     {
+        if (_peers.IsNullOrEmpty())
+        {
+            Host = id;
+        }
+
         if (_peers.TryGetValue(id, out var peer))
         {
             if (peer.Client == client) return;
@@ -71,12 +99,27 @@ internal class PeerRegistry
         if (!_peers.TryGetValue(id, out var peer)) return;
         _peersRev.Remove(peer.Client);
         _peers.Remove(id);
+        if (id == Host) RandomChoiceHost();
+    }
+
+    public void RandomChoiceHost()
+    {
+        if (_peers.IsNullOrEmpty())
+        {
+            Host = null;
+            return;
+        }
+
+        var idx = RandomNumberGenerator.GetInt32(PeerIds.Count);
+        Host = PeerIds.ElementAt(idx);
     }
 }
 
 /// <summary>
 /// 方法中的 io 操作都使用异步运行时运行, 不会直接在调用的时候执行, 可以通过 <see cref="Action{T}"/> 来回调获取结果.
 /// </summary>
+///
+/// 在服务端创建 Packet 需要注意调用 CreatePacket 方法, 能够统一调整 SrcPeer 为 <see cref="Constants.ServerId"/>
 public class StandaloneServer
 {
     // Create 这个操作应该是不产生 io 操作的.
@@ -92,6 +135,16 @@ public class StandaloneServer
         _cts.Cancel(); // 初始是非 Running 状态.
     }
 
+    private delegate void PacketInitializer<T>(ref T packet) where T : Packet;
+
+    private static T CreatePacket<T>(PacketInitializer<T>? initialize = null) where T : Packet
+    {
+        var packet = Activator.CreateInstance<T>();
+        packet.SrcPeer = Constants.ServerId;
+        initialize?.Invoke(ref packet);
+        return packet;
+    }
+
     /// <summary>
     /// 启动服务器, 服务器在新的线程中执行循环.
     /// </summary>
@@ -100,6 +153,7 @@ public class StandaloneServer
         if (Running) return;
         _listener = TcpListener.Create(ModConfig.StandaloneServerPort);
         _peers = new PeerRegistry();
+        _peers.OnHostChanged += OnHostChanged;
         _cts = new CancellationTokenSource();
         _taskBag.Add(Task.Run(async Task () =>
         {
@@ -131,14 +185,33 @@ public class StandaloneServer
         _taskBag.Clear();
     }
 
+    private void OnHostChanged((string?, string?) changes)
+    {
+        _ = SendPacket(CreatePacket<HostPeerPacket>((ref p) => { p.Host = changes.Item2; }));
+    }
+
     private async Task ServerLoop()
     {
         try
         {
+            var acceptTask = _listener.AcceptTcpClientAsync();
+            var hostChangeTask = Task.Delay(ModConfig.ServerHostChangeInterval);
             while (Running)
             {
-                var client = await _listener.AcceptTcpClientAsync();
-                _taskBag.Add(Serve(client)); // 后台服务客户端.
+                var task = await Task.WhenAny(
+                    acceptTask,
+                    hostChangeTask
+                );
+                if (task == acceptTask)
+                {
+                    _taskBag.Add(Serve(await acceptTask)); // 后台服务客户端.
+                    acceptTask = _listener.AcceptTcpClientAsync();
+                }
+                else if (task == hostChangeTask)
+                {
+                    hostChangeTask = Task.Delay(ModConfig.ServerHostChangeInterval);
+                    _peers.RandomChoiceHost();
+                }
             }
         }
         catch (ObjectDisposedException)
@@ -150,70 +223,79 @@ public class StandaloneServer
 
     private async Task Serve(TcpClient client)
     {
-        Utils.Logger?.LogDebug(
-            $"Server peer connection established: {client.Client.RemoteEndPoint}({_peers.Query(client) ?? ""}).");
+        var clientRemoteEndPoint = client.Client.RemoteEndPoint;
+        string? peerId = null;
+        Utils.Logger?.LogDebug($"Server peer connection established: {clientRemoteEndPoint}.");
         try
         {
+            var receivePacketTask = client.GetStream().ReceivePacketAsync(_cts.Token);
             while (Running && client.Connected)
             {
-                var receivePacket = client.GetStream().ReceivePacketAsync(_cts.Token);
-                var task = await Task.WhenAny(receivePacket, Task.Delay(10000));
-                if (task == receivePacket)
+                var task = await Task.WhenAny(receivePacketTask, Task.Delay(3000));
+                if (task == receivePacketTask)
                 {
-                    var packet = await receivePacket;
+                    var packet = await receivePacketTask;
+                    receivePacketTask = client.GetStream().ReceivePacketAsync(_cts.Token);
                     if (packet == null) continue;
-                    Utils.Logger?.LogDebug($"Server received packet {packet.GetType().Name}.");
-                    _taskBag.Add(HandlePacket(packet, client));
+                    if (packet.SrcPeer == Constants.ServerId) continue; // 简单地防止假装.
+                    peerId ??= packet.SrcPeer;
+                    // todo 恢复 logging
+                    // Utils.Logger?.LogDebug($"Server received packet {packet.GetType().Name}.");
+                    if (!packet.IsRealtime)
+                    {
+                        Utils.Logger?.LogDebug($"Server received packet: {packet.GetType().Name}");
+                    }
+
+                    await HandlePacket(packet, client);
                 }
                 else
                 {
                     // 接收超时则发送心跳包.
-                    await SendPacketToClient(new HeartbeatPacket(), client);
+                    await SendPacketToClient(CreatePacket<HeartbeatPacket>(), client);
                 }
             }
+
+            Utils.Logger?.LogDebug(
+                $"Server peer connection `{clientRemoteEndPoint}`({peerId}) closed.");
         }
         catch (Exception e)
         {
+            // 不知道为什么这里的 TrimEnd 还是无法去除末尾的空白字符.
             Utils.Logger?.LogDebug(
-                $"Server peer connection `{client.Client.RemoteEndPoint}`({_peers.Query(client) ?? ""}) closed: {e.Message.TrimEnd()}");
+                $"Server peer connection `{clientRemoteEndPoint}`({peerId}) exception occurred: {e.Message.TrimEnd()}");
+        }
+        finally
+        {
+            client.Close();
+            if (peerId != null)
+            {
+                await SendPacket(CreatePacket<PeerQuitPacket>((ref p) => { p.QuitPeer = peerId; }));
+                _peers.Remove(peerId);
+            }
         }
     }
 
     private async Task HandlePacket(Packet packet, TcpClient client)
     {
         if (packet.IsRealtime && Utils.ServerTime - packet.Time > ModConfig.RealtimeTimeout) return;
-        var peerId = _peers.Query(client);
-        // 自动设置 SrcPeer.
-        if (packet.SrcPeer == null && peerId != null)
-        {
-            packet.SrcPeer = peerId;
-        }
-
         switch (packet)
         {
             case PeerIdPacket peerIdPacket:
-                if (peerIdPacket.SrcPeer != null)
-                {
-                    _peers.Update(peerIdPacket.SrcPeer, client);
-                    await SendPacket(peerIdPacket);
-                }
-
+                _peers.Update(peerIdPacket.SrcPeer, client);
+                await SendPacket(peerIdPacket);
                 break;
             case SyncTimePacket:
-                await SendPacketToClient(new SyncTimePacket(), client);
+                await SendPacketToClient(CreatePacket<SyncTimePacket>(), client);
                 break;
-            case PeerQuitPacket peerQuitPacket:
-                if (peerQuitPacket.SrcPeer != null) // 无来源的直接丢弃.
-                {
-                    _peers.Remove(peerQuitPacket.SrcPeer);
-                    await SendPacket(peerQuitPacket);
-                }
-
+            case PeerQuitPacket: // 仅服务端可发送.
+            case HeartbeatPacket: // 无需响应.
                 break;
-            case HeartbeatPacket:
+            case HostPeerPacket:
+                await SendPacketToClient(
+                    CreatePacket<HostPeerPacket>((ref p) => { p.Host = _peers.Host; }),
+                    client);
                 break;
             default:
-                if (packet.SrcPeer == null) break;
                 await SendPacket(packet);
                 break;
         }
@@ -222,12 +304,6 @@ public class StandaloneServer
 
     private async Task SendPacket(Packet packet)
     {
-        if (packet.SrcPeer == null) // 无来源的 packet 选择直接抛弃,
-            // 如果是特殊 packet, 使用 SendPacketToClient 直接发送.
-        {
-            return;
-        }
-
         List<Task> sendHandles = [];
         var dstPeer = packet.DstPeer;
         if (dstPeer != null)
@@ -260,7 +336,13 @@ public class StandaloneServer
     {
         if (!client.Connected) return;
         var stream = client.GetStream();
-        Utils.Logger?.LogDebug($"Server sent packet {packet.GetType().Name}.");
+        // todo 恢复 logging
+        // Utils.Logger?.LogDebug($"Server sent packet {packet.GetType().Name}.");
+        if (!packet.IsRealtime)
+        {
+            Utils.Logger?.LogDebug($"Server sent packet {packet.GetType().Name}.");
+        }
+
         await stream.SendPacketAsync(packet, _cts.Token);
     }
 }

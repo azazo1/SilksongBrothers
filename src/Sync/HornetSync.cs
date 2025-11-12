@@ -11,7 +11,7 @@ namespace SilksongBrothers.Sync;
 public class HornetSync : BaseSync
 {
     protected override float TriggerFrequency => 15.0f;
-    private static HornetSync? _instance;
+    private static HornetSync _instance;
 
     // self
     private GameObject hornetObject;
@@ -29,7 +29,7 @@ public class HornetSync : BaseSync
 
     public override void Bind(IConnection connection)
     {
-        if (_instance != null)
+        if (_instance)
             throw new InvalidOperationException("Already bound");
         base.Bind(connection);
         _instance = this;
@@ -48,8 +48,9 @@ public class HornetSync : BaseSync
     private void OnPlayerLeave(Peer peer)
     {
         // 另一方面, 玩家可能是在主界面中加入的, 并没有在游戏内加入.
-        if (_playerObjects.TryGetValue(peer.Id, out var playerObject) && playerObject)
-            Destroy(playerObject);
+        if (!_playerObjects.TryGetValue(peer.Id, out var playerObject)) return;
+        Destroy(playerObject);
+        _playerObjects.Remove(peer.Id);
     }
 
     protected override void Update()
@@ -80,11 +81,11 @@ public class HornetSync : BaseSync
     protected override void FixedTrigger()
     {
         if (Connection?.Connected != true) return;
-        SendHornetPositionPacket();
+        BroadcastHornetPositionPacket();
     }
 
     // position
-    private void SendHornetPositionPacket()
+    private void BroadcastHornetPositionPacket()
     {
         if (!hornetObject || !hornetRigidbody) return;
 
@@ -133,20 +134,20 @@ public class HornetSync : BaseSync
                 playerAnimator.Library = hornetAnimator.Library;
                 playerAnimator.Play(hornetAnimator.CurrentClip);
 
-                // playerInterpolator = playerObject.AddComponent<SimpleInterpolator>();
-                // playerInterpolator.SetVelocity(new Vector3(packet.VelocityX, packet.VelocityY, 0));
+                playerInterpolator = playerObject.AddComponent<SimpleInterpolator>();
+                playerInterpolator.SetVelocity(new Vector3(packet.VelocityX, packet.VelocityY, 0));
 
                 _playerObjects[peer.Id] = playerObject;
                 _playerSprites[peer.Id] = playerSprite;
                 _playerAnimators[peer.Id] = playerAnimator;
-                // _playerInterpolators[peer.Id] = playerInterpolator;
+                _playerInterpolators[peer.Id] = playerInterpolator;
             }
 
             playerObject.transform.position = new Vector3(packet.PosX, packet.PosY,
                 hornetObject.transform.position.z + 0.001f);
             playerObject.transform.localScale = new Vector3(packet.ScaleX, 1, 1);
             playerObject.SetActive(packet.Scene == SceneManager.GetActiveScene().name);
-            // playerInterpolator.SetVelocity(new Vector3(packet.VelocityX, packet.VelocityY, 0));
+            playerInterpolator.SetVelocity(new Vector3(packet.VelocityX, packet.VelocityY, 0));
         }
         catch (Exception e)
         {
@@ -178,7 +179,7 @@ public class HornetSync : BaseSync
             }
 
             playerAnimator.Play(clip);
-            Utils.Logger?.LogDebug($"Started animation {clip.name} for player {peer.Name}");
+            // Utils.Logger?.LogDebug($"Started animation {clip.name} for player {peer.Name}");
         }
         catch (Exception e)
         {

@@ -5,7 +5,6 @@ using System.Linq;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
-using MemoryPack;
 
 namespace SilksongBrothers.Network.Standalone;
 
@@ -20,6 +19,7 @@ public class StandaloneConnection : IConnection
     /// </summary>
     private readonly Dictionary<Type, Action<Packet>> _handlers = new();
 
+    public string? PeerId { get; private set; }
     public bool Connected => _client.Connected;
     public Action OnConnected { get; set; } = () => { };
     public Action<Exception> OnConnectFailed { get; set; } = _ => { };
@@ -80,7 +80,8 @@ public class StandaloneConnection : IConnection
     public void Destroy()
     {
         _txQueue.Add(null); // 添加伪包, 检查发送线程是否将伪包前面的包都发送完毕.
-        while (Connected && _txQueue.Count > 0)
+        var timeout = 1000 + Utils.Time;
+        while (Connected && _txQueue.Count > 0 && Utils.Time < timeout)
         {
             Thread.Sleep(10);
         }
@@ -92,6 +93,10 @@ public class StandaloneConnection : IConnection
     public void Send<T>(T packet) where T : Packet
     {
         _txQueue.Add(packet);
+        if (packet is PeerIdPacket peerIdPacket)
+        {
+            PeerId = peerIdPacket.SrcPeer;
+        }
     }
 
     public Action<Packet> AddHandler<T>(Action<T> handler) where T : Packet
@@ -143,7 +148,8 @@ public class StandaloneConnection : IConnection
         {
             var packet = await stream.ReceivePacketAsync(_connectionCts.Token);
             if (packet == null) continue;
-            Utils.Logger?.LogDebug($"Client received packet {packet.GetType().Name}.");
+            // todo 恢复 logging
+            // Utils.Logger?.LogDebug($"Client received packet {packet.GetType().Name}.");
             _rxQueue.Enqueue(packet);
         }
     }
@@ -156,7 +162,8 @@ public class StandaloneConnection : IConnection
             var packet = _txQueue.Take();
             if (packet == null) continue;
             await stream.SendPacketAsync(packet, _connectionCts.Token);
-            Utils.Logger?.LogDebug($"Client sent packet {packet.GetType().Name}.");
+            // todo 恢复 logging
+            // Utils.Logger?.LogDebug($"Client sent packet {packet.GetType().Name}.");
         }
     }
 
@@ -178,7 +185,7 @@ public class StandaloneConnection : IConnection
             {
                 if (_realtimeDebugThrottler.Tick())
                 {
-                    Utils.Logger?.LogDebug("Client dropped outdated realtime packet.");
+                    Utils.Logger?.LogWarning("Client dropped outdated realtime packet.");
                 }
 
                 continue;
