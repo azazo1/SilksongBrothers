@@ -129,6 +129,8 @@ public class StandaloneServer
     private volatile PeerRegistry _peers = new();
     private volatile CancellationTokenSource _cts = new();
     private readonly ConcurrentBag<Task> _taskBag = [];
+    private readonly PacketLogger _packetSendLogger = new(Utils.Logger, false, true);
+    private readonly PacketLogger _packetReceiveLogger = new(Utils.Logger, false, false);
 
     public StandaloneServer()
     {
@@ -239,8 +241,7 @@ public class StandaloneServer
                     if (packet == null) continue;
                     if (packet.SrcPeer == Constants.ServerId) continue; // 简单地防止假装.
                     peerId ??= packet.SrcPeer;
-                    // todo 恢复 logging
-                    // Utils.Logger?.LogDebug($"Server received packet {packet.GetType().Name}.");
+                    _packetReceiveLogger.LogDebug(packet);
                     if (!packet.IsRealtime)
                     {
                         Utils.Logger?.LogDebug($"Server received packet: {packet.GetType().Name}");
@@ -336,13 +337,7 @@ public class StandaloneServer
     {
         if (!client.Connected) return;
         var stream = client.GetStream();
-        // todo 恢复 logging
-        // Utils.Logger?.LogDebug($"Server sent packet {packet.GetType().Name}.");
-        if (!packet.IsRealtime)
-        {
-            Utils.Logger?.LogDebug($"Server sent packet {packet.GetType().Name}.");
-        }
-
+        _packetSendLogger.LogDebug(packet);
         await stream.SendPacketAsync(packet, _cts.Token);
     }
 }

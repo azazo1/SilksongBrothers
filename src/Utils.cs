@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Sockets;
 using System.Reflection;
@@ -70,10 +71,9 @@ public class Throttler(long interval)
     public bool Tick()
     {
         var curTime = Utils.Time;
-        if (curTime - _lastActivatedTime <= interval) return false;
+        if (curTime - _lastActivatedTime < interval) return false;
         _lastActivatedTime = curTime;
         return true;
-
     }
 }
 
@@ -140,4 +140,46 @@ public static class NetworkStreamExt
             read += await stream.ReadAsync(buf.AsMemory(0, Math.Min(length - read, bufLength)), token);
         }
     }
+}
+
+public class PacketLogger
+{
+    private readonly ManualLogSource? _logger;
+    private readonly bool _throttleNonRealtime;
+    private readonly Dictionary<Type, Throttler> _throttlers = new();
+    private readonly Throttler _dummyThrottler = new Throttler(0);
+    private readonly bool _isClient;
+    private readonly bool _isSend;
+
+    public PacketLogger(ManualLogSource? source, bool isClient, bool isSend, bool throttleNonRealtime = false)
+    {
+        _logger = source;
+        _isClient = isClient;
+        _isSend = isSend;
+        _throttleNonRealtime = throttleNonRealtime;
+    }
+
+    public void Log<T>(LogLevel level, T packet) where T : Packet
+    {
+        var throttler = _dummyThrottler;
+        if (packet.IsRealtime || _throttleNonRealtime)
+            if (!_throttlers.TryGetValue(typeof(T), out throttler))
+            {
+                _throttlers.Add(typeof(T), new Throttler(1000));
+                throttler = _throttlers[typeof(T)];
+            }
+
+        if (!throttler.Tick()) return;
+        var side = _isClient ? "Client" : "Server";
+        var send = _isSend ? "send" : "receive";
+        _logger?.Log(level, $"{side} {send} packet: {typeof(T).Name}");
+    }
+
+    public void LogError<T>(T packet) where T : Packet => Log(LogLevel.Error, packet);
+
+    public void LogWarning<T>(T packet) where T : Packet => Log(LogLevel.Warning, packet);
+
+    public void LogDebug<T>(T packet) where T : Packet => Log(LogLevel.Debug, packet);
+
+    public void LogInfo<T>(T packet) where T : Packet => Log(LogLevel.Info, packet);
 }

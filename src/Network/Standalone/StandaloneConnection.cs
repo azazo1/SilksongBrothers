@@ -13,6 +13,8 @@ public class StandaloneConnection : IConnection
     private volatile TcpClient _client = new();
     private readonly Throttler _realtimeDebugThrottler = new(1000);
     private CancellationTokenSource _connectionCts = new();
+    private readonly PacketLogger _packetSendLogger = new(Utils.Logger, true, true);
+    private readonly PacketLogger _packetReceiveLogger = new(Utils.Logger, true, false);
 
     /// <summary>
     /// PacketType => handlers callback
@@ -148,8 +150,7 @@ public class StandaloneConnection : IConnection
         {
             var packet = await stream.ReceivePacketAsync(_connectionCts.Token);
             if (packet == null) continue;
-            // todo 恢复 logging
-            // Utils.Logger?.LogDebug($"Client received packet {packet.GetType().Name}.");
+            _packetReceiveLogger.LogDebug(packet);
             _rxQueue.Enqueue(packet);
         }
     }
@@ -162,8 +163,7 @@ public class StandaloneConnection : IConnection
             var packet = _txQueue.Take();
             if (packet == null) continue;
             await stream.SendPacketAsync(packet, _connectionCts.Token);
-            // todo 恢复 logging
-            // Utils.Logger?.LogDebug($"Client sent packet {packet.GetType().Name}.");
+            _packetSendLogger.LogDebug(packet);
         }
     }
 
