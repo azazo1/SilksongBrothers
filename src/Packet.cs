@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Generic;
+using GlobalEnums;
 using MemoryPack;
 using SilksongBrothers.Network;
 using UnityEngine;
@@ -20,6 +20,7 @@ namespace SilksongBrothers;
 [MemoryPackUnion(8, typeof(EnemyFsmPacket))]
 [MemoryPackUnion(9, typeof(AttackRequestPacket))]
 [MemoryPackUnion(10, typeof(HostPeerPacket))]
+[MemoryPackUnion(11, typeof(NailSlashPacket))]
 public abstract partial class Packet
 {
     /// <summary>
@@ -241,4 +242,13 @@ public partial class HostPeerPacket : Packet
     /// 由服务端设置并发送给客户端.
     /// </summary>
     public string? Host;
+}
+
+/// <summary>
+/// 织针劈砍同步.
+/// </summary>
+[MemoryPackable]
+public partial class NailSlashPacket : Packet
+{
+    public AttackDirection Direction;
 }

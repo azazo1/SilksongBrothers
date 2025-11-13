@@ -9,8 +9,6 @@ using System.Threading.Tasks;
 
 namespace SilksongBrothers.Network.Standalone;
 
-// todo 连接总是莫名其妙关闭但是客户端没察觉到.
-
 internal class Peer(string id, TcpClient client)
 {
     public string Id => id;

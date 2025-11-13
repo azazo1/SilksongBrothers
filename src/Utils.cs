@@ -142,44 +142,40 @@ public static class NetworkStreamExt
     }
 }
 
-public class PacketLogger
+public class PacketLogger(
+    ManualLogSource? source,
+    bool isClient,
+    bool isSend,
+    bool throttleNonRealtime = false
+)
 {
-    private readonly ManualLogSource? _logger;
-    private readonly bool _throttleNonRealtime;
     private readonly Dictionary<Type, Throttler> _throttlers = new();
-    private readonly Throttler _dummyThrottler = new Throttler(0);
-    private readonly bool _isClient;
-    private readonly bool _isSend;
+    private readonly Throttler _dummyThrottler = new(0);
 
-    public PacketLogger(ManualLogSource? source, bool isClient, bool isSend, bool throttleNonRealtime = false)
-    {
-        _logger = source;
-        _isClient = isClient;
-        _isSend = isSend;
-        _throttleNonRealtime = throttleNonRealtime;
-    }
-
-    public void Log<T>(LogLevel level, T packet) where T : Packet
+    public void Log(LogLevel level, Packet packet)
     {
         var throttler = _dummyThrottler;
-        if (packet.IsRealtime || _throttleNonRealtime)
-            if (!_throttlers.TryGetValue(typeof(T), out throttler))
+        var type = packet.GetType();
+        if (packet.IsRealtime || throttleNonRealtime)
+        {
+            if (!_throttlers.TryGetValue(type, out throttler))
             {
-                _throttlers.Add(typeof(T), new Throttler(1000));
-                throttler = _throttlers[typeof(T)];
+                _throttlers.Add(type, new Throttler(10000));
+                throttler = _throttlers[type];
             }
+        }
 
         if (!throttler.Tick()) return;
-        var side = _isClient ? "Client" : "Server";
-        var send = _isSend ? "send" : "receive";
-        _logger?.Log(level, $"{side} {send} packet: {typeof(T).Name}");
+        var side = isClient ? "Client" : "Server";
+        var send = isSend ? "send" : "receive";
+        source?.Log(level, $"{side} {send} packet: {type.Name}");
     }
 
-    public void LogError<T>(T packet) where T : Packet => Log(LogLevel.Error, packet);
+    public void LogError(Packet packet) => Log(LogLevel.Error, packet);
 
-    public void LogWarning<T>(T packet) where T : Packet => Log(LogLevel.Warning, packet);
+    public void LogWarning(Packet packet) => Log(LogLevel.Warning, packet);
 
-    public void LogDebug<T>(T packet) where T : Packet => Log(LogLevel.Debug, packet);
+    public void LogDebug(Packet packet) => Log(LogLevel.Debug, packet);
 
-    public void LogInfo<T>(T packet) where T : Packet => Log(LogLevel.Info, packet);
+    public void LogInfo(Packet packet) => Log(LogLevel.Info, packet);
 }

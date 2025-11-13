@@ -20,12 +20,10 @@ public class HornetSync : BaseSync
     private Rigidbody2D hornetRigidbody;
     private readonly Dictionary<string, tk2dSpriteCollectionData> _spriteCollections = new();
 
-    // others
-    // peer id => ...
+    // peers
+    // peer id => game object
     private readonly Dictionary<string, GameObject> _playerObjects = new();
-    private readonly Dictionary<string, tk2dSprite> _playerSprites = new();
     private readonly Dictionary<string, tk2dSpriteAnimator> _playerAnimators = new();
-    private readonly Dictionary<string, SimpleInterpolator> _playerInterpolators = new();
 
     public override void Bind(IConnection connection)
     {
@@ -105,42 +103,38 @@ public class HornetSync : BaseSync
         try
         {
             if (!hornetObject || !hornetAnimator) return;
-            if (packet.SrcPeer == null) return;
             var peerId = packet.SrcPeer;
             var peer = PeerRegistry.Query(peerId);
             if (peer == null) return;
 
-            if (!_playerObjects.TryGetValue(peerId, out var playerObject) ||
-                !_playerSprites.TryGetValue(peerId, out var playerSprite) ||
-                !_playerAnimators.TryGetValue(peerId, out var playerAnimator) ||
-                !_playerInterpolators.TryGetValue(peerId, out var playerInterpolator))
+            if (!_playerObjects.TryGetValue(peerId, out var playerObject) || !playerObject)
             {
-                Utils.Logger?.LogDebug($"Creating new player object for player {peer.Name}...");
-
-                playerObject = new GameObject
-                {
-                    name = $"SilksongBrother - {peer.Name}"
-                };
+                playerObject = new GameObject { name = $"SilksongBrother - {peer.Id}" };
                 playerObject.transform.SetParent(transform);
                 playerObject.transform.position = new Vector3(packet.PosX, packet.PosY,
                     hornetObject.transform.position.z + 0.001f);
                 playerObject.transform.localScale = new Vector3(packet.ScaleX, 1, 1);
+                _playerObjects[peer.Id] = playerObject;
+            }
 
-                playerSprite = tk2dSprite.AddComponent(playerObject, hornetSprite.Collection,
-                    hornetSprite.spriteId);
+            if (!playerObject.TryGetComponent<tk2dSprite>(out var playerSprite) || !playerSprite)
+            {
+                playerSprite = tk2dSprite.AddComponent(playerObject, hornetSprite.Collection, hornetSprite.spriteId);
                 playerSprite.color = new Color(1, 1, 1, ModConfig.PlayerOpacity);
+            }
 
+            if (!playerObject.TryGetComponent<tk2dSpriteAnimator>(out var playerAnimator) || !playerAnimator)
+            {
                 playerAnimator = playerObject.AddComponent<tk2dSpriteAnimator>();
                 playerAnimator.Library = hornetAnimator.Library;
                 playerAnimator.Play(hornetAnimator.CurrentClip);
+                _playerAnimators[peer.Id] = playerAnimator;
+            }
 
+            if (!playerObject.TryGetComponent<SimpleInterpolator>(out var playerInterpolator) || !playerInterpolator)
+            {
                 playerInterpolator = playerObject.AddComponent<SimpleInterpolator>();
                 playerInterpolator.SetVelocity(new Vector3(packet.VelocityX, packet.VelocityY, 0));
-
-                _playerObjects[peer.Id] = playerObject;
-                _playerSprites[peer.Id] = playerSprite;
-                _playerAnimators[peer.Id] = playerAnimator;
-                _playerInterpolators[peer.Id] = playerInterpolator;
             }
 
             playerObject.transform.position = new Vector3(packet.PosX, packet.PosY,
@@ -161,7 +155,6 @@ public class HornetSync : BaseSync
         try
         {
             if (!hornetObject) return;
-            if (packet.SrcPeer == null) return;
             var peerId = packet.SrcPeer;
             var peer = PeerRegistry.Query(peerId);
             if (peer == null) return;

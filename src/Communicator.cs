@@ -29,6 +29,7 @@ public class Communicator
     {
         // syncs 的添加要放在 Connect 之前, 因为 SetupHandlers 在 Connect 中.
         _syncs.Add(SilksongBrothersPlugin.Instance!.gameObject.AddComponent<HornetSync>());
+        _syncs.Add(SilksongBrothersPlugin.Instance!.gameObject.AddComponent<SlashSync>());
         _syncs.Add(SilksongBrothersPlugin.Instance!.gameObject.AddComponent<EnemySync>());
         Connect();
         SyncPeerId();
