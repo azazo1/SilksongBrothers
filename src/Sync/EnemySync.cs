@@ -226,7 +226,7 @@ public class EnemySync : BaseSync
     private void OnAttackRequest(AttackRequestPacket packet)
     {
         if (!IsHost) return;
-        var enemy = EnemyRegistry.FindById(packet.enemyId, packet.scene);
+        var enemy = EnemyRegistry.FindById(packet.EnemyId, packet.Scene);
         if (!enemy) return;
         var hm = enemy.GetComponent<HealthManager>();
         if (!hm || !hm.isActiveAndEnabled)
@@ -234,18 +234,18 @@ public class EnemySync : BaseSync
         hm.Hit(new HitInstance
         {
             Source = _hero ? _hero.gameObject : null,
-            AttackType = (AttackTypes)packet.hit.attackType,
-            NailElement = (NailElements)packet.hit.nailElement,
-            DamageDealt = packet.hit.damageDealt,
-            Direction = packet.hit.direction,
-            MagnitudeMultiplier = packet.hit.magnitudeMult,
-            NonLethal = packet.hit.nonLethal,
-            CriticalHit = packet.hit.critical,
-            CanWeakHit = packet.hit.canWeakHit,
-            Multiplier = packet.hit.multiplier,
-            DamageScalingLevel = packet.hit.damageScalingLevel,
-            SpecialType = (SpecialTypes)packet.hit.specialType,
-            IsHeroDamage = packet.hit.isHeroDamage
+            AttackType = (AttackTypes)packet.Hit.AttackType,
+            NailElement = (NailElements)packet.Hit.NailElement,
+            DamageDealt = packet.Hit.DamageDealt,
+            Direction = packet.Hit.Direction,
+            MagnitudeMultiplier = packet.Hit.MagnitudeMult,
+            NonLethal = packet.Hit.NonLethal,
+            CriticalHit = packet.Hit.Critical,
+            CanWeakHit = packet.Hit.CanWeakHit,
+            Multiplier = packet.Hit.Multiplier,
+            DamageScalingLevel = packet.Hit.DamageScalingLevel,
+            SpecialType = (SpecialTypes)packet.Hit.SpecialType,
+            IsHeroDamage = packet.Hit.IsHeroDamage
         });
         BroadcastEnemyHealth(hm);
     }
@@ -337,22 +337,22 @@ public class EnemySync : BaseSync
                 return;
             var attackRequest = new AttackRequestPacket
             {
-                enemyId = enemyId,
-                scene = SceneManager.GetActiveScene().name,
-                hit = new AttackRequestPacket.SimpleHit
+                EnemyId = enemyId,
+                Scene = SceneManager.GetActiveScene().name,
+                Hit = new AttackRequestPacket.SimpleHit
                 {
-                    damageDealt = hitInstance.DamageDealt,
-                    direction = hitInstance.Direction,
-                    magnitudeMult = hitInstance.MagnitudeMultiplier,
-                    attackType = (int)hitInstance.AttackType,
-                    nailElement = (int)hitInstance.NailElement,
-                    nonLethal = false,
-                    critical = hitInstance.CriticalHit,
-                    canWeakHit = hitInstance.CanWeakHit,
-                    multiplier = hitInstance.Multiplier,
-                    damageScalingLevel = hitInstance.DamageScalingLevel,
-                    specialType = (int)hitInstance.SpecialType,
-                    isHeroDamage = true
+                    DamageDealt = hitInstance.DamageDealt,
+                    Direction = hitInstance.Direction,
+                    MagnitudeMult = hitInstance.MagnitudeMultiplier,
+                    AttackType = (int)hitInstance.AttackType,
+                    NailElement = (int)hitInstance.NailElement,
+                    NonLethal = false,
+                    Critical = hitInstance.CriticalHit,
+                    CanWeakHit = hitInstance.CanWeakHit,
+                    Multiplier = hitInstance.Multiplier,
+                    DamageScalingLevel = hitInstance.DamageScalingLevel,
+                    SpecialType = (int)hitInstance.SpecialType,
+                    IsHeroDamage = true
                 }
             };
             Utils.Logger?.LogDebug("Try sending attack request packet...");

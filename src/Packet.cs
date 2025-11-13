@@ -1,5 +1,4 @@
 using System;
-using GlobalEnums;
 using MemoryPack;
 using SilksongBrothers.Network;
 using UnityEngine;
@@ -20,7 +19,6 @@ namespace SilksongBrothers;
 [MemoryPackUnion(8, typeof(EnemyFsmPacket))]
 [MemoryPackUnion(9, typeof(AttackRequestPacket))]
 [MemoryPackUnion(10, typeof(HostPeerPacket))]
-[MemoryPackUnion(11, typeof(NailSlashPacket))]
 public abstract partial class Packet
 {
     /// <summary>
@@ -204,25 +202,25 @@ public partial class EnemyFsmPacket : Packet
 [MemoryPackable]
 public partial class AttackRequestPacket : Packet
 {
-    public string enemyId;
-    public SimpleHit hit;
-    public string scene;
+    public string EnemyId;
+    public SimpleHit Hit;
+    public string Scene;
 
     [MemoryPackable]
     public partial class SimpleHit
     {
-        public int damageDealt;
-        public float direction;
-        public float magnitudeMult;
-        public int attackType;
-        public int nailElement;
-        public bool nonLethal;
-        public bool critical;
-        public bool canWeakHit;
-        public float multiplier;
-        public int damageScalingLevel;
-        public int specialType;
-        public bool isHeroDamage;
+        public int DamageDealt;
+        public float Direction;
+        public float MagnitudeMult;
+        public int AttackType;
+        public int NailElement;
+        public bool NonLethal;
+        public bool Critical;
+        public bool CanWeakHit;
+        public float Multiplier;
+        public int DamageScalingLevel;
+        public int SpecialType;
+        public bool IsHeroDamage;
     }
 }
 
@@ -242,13 +240,4 @@ public partial class HostPeerPacket : Packet
     /// 由服务端设置并发送给客户端.
     /// </summary>
     public string? Host;
-}
-
-/// <summary>
-/// 织针劈砍同步.
-/// </summary>
-[MemoryPackable]
-public partial class NailSlashPacket : Packet
-{
-    public AttackDirection Direction;
 }
