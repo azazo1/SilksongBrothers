@@ -19,6 +19,7 @@ namespace SilksongBrothers;
 [MemoryPackUnion(8, typeof(EnemyFsmPacket))]
 [MemoryPackUnion(9, typeof(AttackRequestPacket))]
 [MemoryPackUnion(10, typeof(HostPeerPacket))]
+[MemoryPackUnion(11, typeof(PlayerDeathPacket))]
 public abstract partial class Packet
 {
     /// <summary>
@@ -241,3 +242,7 @@ public partial class HostPeerPacket : Packet
     /// </summary>
     public string? Host;
 }
+
+// todo player dead message, 顺便测试一下能不能防止死亡, 让其进入观战模式.
+[MemoryPackable]
+public partial class PlayerDeathPacket: Packet;
