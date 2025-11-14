@@ -109,8 +109,9 @@ internal class PeerRegistry
             return;
         }
 
-        var idx = RandomNumberGenerator.GetInt32(PeerIds.Count);
-        Host = PeerIds.ElementAt(idx);
+        var alivePeers = Peers.Where(p => p.Alive).ToList();
+        var idx = RandomNumberGenerator.GetInt32(alivePeers.Count);
+        Host = alivePeers[idx].Id;
     }
 }
 
@@ -186,7 +187,9 @@ public class StandaloneServer
 
     private void OnHostChanged((string?, string?) changes)
     {
-        _ = SendPacket(CreatePacket<HostPeerPacket>(p => { p.Host = changes.Item2; }));
+        Task.Run(async () =>
+            await SendPacket(CreatePacket<HostPeerPacket>(p => { p.Host = changes.Item2; }))
+        );
     }
 
     private async Task ServerLoop()

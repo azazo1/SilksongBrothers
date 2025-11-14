@@ -52,7 +52,7 @@ public class HornetSync : BaseSync
             throw new InvalidOperationException("Already bound");
         base.Bind(connection);
         _instance = this;
-        connection.AddHandler<HornetPositionPacket>(OnHornetPositionPacket);
+        connection.AddHandler<HornetStatePacket>(OnHornetPositionPacket);
         connection.AddHandler<HornetAnimationPacket>(OnHornetAnimationPacket);
         connection.AddHandler<PlayerDeathPacket>(OnPeerPlayerDeath);
         connection.AddHandler<RespawnSetPacket>(OnRespawnSet);
@@ -96,7 +96,7 @@ public class HornetSync : BaseSync
                     _spectatingPlayerIdx %= _alivePlayers!.Count;
 
                     var hc = HeroController.instance;
-                    if (hc)
+                    if (hc && hc.gm.GameState == GameState.PLAYING)
                     {
                         hc.transform.position = _lastSpectatingPosition;
                     }
@@ -146,9 +146,11 @@ public class HornetSync : BaseSync
     private void BroadcastHornetPositionPacket()
     {
         if (!hornetObject || !hornetRigidbody) return;
+        var hc = HeroController.instance;
+        if (!hc) return;
         if (_state == HornetSyncState.Spectator) return;
 
-        Connection?.Send(new HornetPositionPacket
+        Connection?.Send(new HornetStatePacket
         {
             Scene = SceneManager.GetActiveScene().name,
             PosX = hornetObject.transform.position.x,
@@ -156,6 +158,7 @@ public class HornetSync : BaseSync
             ScaleX = hornetObject.transform.localScale.x,
             VelocityX = hornetRigidbody.linearVelocity.x * Time.timeScale,
             VelocityY = hornetRigidbody.linearVelocity.y * Time.timeScale,
+            EntryGateName = hc.sceneEntryGate ? hc.sceneEntryGate.name : null
         });
     }
 
@@ -166,7 +169,7 @@ public class HornetSync : BaseSync
         return _spectatingPlayerIdx is { } idx && peerId == _alivePlayers![idx];
     }
 
-    private void OnHornetPositionPacket(HornetPositionPacket packet)
+    private void OnHornetPositionPacket(HornetStatePacket packet)
     {
         try
         {
@@ -212,18 +215,12 @@ public class HornetSync : BaseSync
             playerInterpolator.SetVelocity(new Vector3(packet.VelocityX, packet.VelocityY, 0));
             if (IsSpectating(packet.SrcPeer) && hornetObject)
             {
+                hornetObject.transform.position = playerObject.transform.position;
+                _lastSpectatingPosition = playerObject.transform.position;
                 if (packet.Scene != SceneManager.GetActiveScene().name)
                 {
-                    ChangeToScene(packet.Scene);
-                    if (SceneManager.GetActiveScene().name != packet.Scene) return;
-                    hornetObject.transform.position = playerObject.transform.position;
+                    ChangeToScene(packet.Scene, packet.EntryGateName);
                 }
-                else
-                {
-                    hornetObject.transform.position = playerObject.transform.position;
-                }
-
-                _lastSpectatingPosition = playerObject.transform.position;
             }
         }
         catch (Exception e)
@@ -232,28 +229,13 @@ public class HornetSync : BaseSync
         }
     }
 
-    private static void ChangeToScene(string scene)
+    private static void ChangeToScene(string scene, string? entryGateName)
     {
-        // var transitionPoint = GameManager.instance.FindTransitionPoint(
-        //     GameManager.instance.entryGateName,
-        //     SceneManager.GetSceneByName(scene), // 场景 (SceneManager.GetSceneByName 获取 scene 之前需要先加载 scene, 不然会获取到 null.)
-        //                                         // 但是暂时不知道怎么手动加载场景.
-        //     false // fallbackToAnyAvailable == true 则尽管前两个参数是无效的, 仍然可以获得有效的 TransitionPoint.
-        // );
-        // GameManager.instance.StartCoroutine(hc.EnterScene(
-        //     transitionPoint,
-        //     0, // 切换场景之后等待 delayBeforeEnter 秒之后走进来.
-        //     false, // 暂时未知作用.
-        //     onEnd, // 协程调用完毕之后的回调函数.
-        //     true // enterSkip == true 忽略走进来的动画, 直接平移角色到入门位置.
-        // ));
-
-        // StopAllSceneMusic(GameManager.instance);
         var gm = GameManager.instance;
         if (!gm) return;
         if (gm.GameState == GameState.EXITING_LEVEL) // 防止频繁地切换.
             return;
-        gm.ChangeToScene(scene, null, 0);
+        gm.ChangeToScene(scene, entryGateName, 0);
     }
 
     private void OnHornetAnimationPacket(HornetAnimationPacket packet)
@@ -372,7 +354,7 @@ public class HornetSync : BaseSync
 
         var facingRight = hornetObject.transform.localScale.x > 0;
         if (SceneManager.GetActiveScene().name != packet.SceneName)
-            ChangeToScene(packet.SceneName);
+            ChangeToScene(packet.SceneName, null);
         PatchSitBench.SetRespawnNoSending(
             packet.SpawnMarker,
             packet.SceneName,
@@ -566,4 +548,5 @@ public class HornetSync : BaseSync
         }
     }
     // todo spectator 模式禁止玩家发出声音.
+    // todo 显示同伴血量
 }

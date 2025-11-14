@@ -13,7 +13,7 @@ namespace SilksongBrothers;
 [MemoryPackUnion(1, typeof(PeerIdPacket))]
 [MemoryPackUnion(2, typeof(SyncTimePacket))]
 [MemoryPackUnion(3, typeof(HeartbeatPacket))]
-[MemoryPackUnion(4, typeof(HornetPositionPacket))]
+[MemoryPackUnion(4, typeof(HornetStatePacket))]
 [MemoryPackUnion(5, typeof(HornetAnimationPacket))]
 [MemoryPackUnion(6, typeof(EnemyPosPacket))]
 [MemoryPackUnion(7, typeof(EnemyHealthPacket))]
@@ -128,7 +128,7 @@ public partial class SyncTimePacket : Packet
 public partial class HeartbeatPacket : Packet;
 
 [MemoryPackable]
-public partial class HornetPositionPacket : Packet
+public partial class HornetStatePacket : Packet
 {
     public string Scene;
     public float PosX;
@@ -141,8 +141,12 @@ public partial class HornetPositionPacket : Packet
 
     public float VelocityX;
     public float VelocityY;
+    public int Health;
+    public int MaxHealth;
+    public int BlueHealth;
+    public string? EntryGateName;
 
-    public HornetPositionPacket()
+    public HornetStatePacket()
     {
         IsRealtime = true;
     }
