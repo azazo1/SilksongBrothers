@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using MemoryPack;
 using SilksongBrothers.Network;
 using UnityEngine;
@@ -20,6 +21,8 @@ namespace SilksongBrothers;
 [MemoryPackUnion(9, typeof(AttackRequestPacket))]
 [MemoryPackUnion(10, typeof(HostPeerPacket))]
 [MemoryPackUnion(11, typeof(PlayerDeathPacket))]
+[MemoryPackUnion(12, typeof(AlivePlayersPacket))]
+[MemoryPackUnion(13, typeof(RespawnSetPacket))]
 public abstract partial class Packet
 {
     /// <summary>
@@ -243,6 +246,36 @@ public partial class HostPeerPacket : Packet
     public string? Host;
 }
 
-// todo player dead message, 顺便测试一下能不能防止死亡, 让其进入观战模式.
+/// <summary>
+/// 玩家死亡信息, 客户端给服务端发送, 服务端会广播此包给所有玩家, 包括包源头.
+/// 随后服务端广播 <see cref="AlivePlayersPacket"/> 告知当前游戏中存活的人数.
+/// </summary>
 [MemoryPackable]
-public partial class PlayerDeathPacket: Packet;
+public partial class PlayerDeathPacket : Packet
+{
+    /// <summary>
+    /// 死亡的玩家的 Peer Id.
+    /// </summary>
+    public string DeadPeerId;
+}
+
+/// <summary>
+/// 仅服务端可发送, 告知游戏中所有的存活玩家数.
+/// </summary>
+[MemoryPackable]
+public partial class AlivePlayersPacket : Packet
+{
+    public List<string>? AlivePlayers;
+}
+
+/// <summary>
+/// 玩家坐长椅事件, 可以让观战玩家复活.
+/// </summary>
+[MemoryPackable]
+public partial class RespawnSetPacket : Packet
+{
+    public string SpawnMarker;
+    public string SceneName;
+    public int RespawnType;
+    public Vector3 RespawnPosition;
+};

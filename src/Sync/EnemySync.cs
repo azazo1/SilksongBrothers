@@ -128,7 +128,6 @@ public class EnemySync : BaseSync
     private string? _host;
     private bool IsHost => _host != null && _host == Connection?.PeerId;
     private static EnemySync _instance;
-    private HeroController _hero;
 
     protected override float TriggerFrequency => 15.0f;
 
@@ -146,13 +145,6 @@ public class EnemySync : BaseSync
         connection.AddHandler<AttackRequestPacket>(OnAttackRequest);
         connection.AddHandler<HostPeerPacket>(OnHostPeer);
         connection.Send(new HostPeerPacket());
-    }
-
-    protected override void Update()
-    {
-        base.Update();
-        if (!_hero)
-            _hero = FindObjectOfType<HeroController>();
     }
 
     public override void Unbind()
@@ -231,9 +223,10 @@ public class EnemySync : BaseSync
         var hm = enemy.GetComponent<HealthManager>();
         if (!hm || !hm.isActiveAndEnabled)
             return;
+        var hc = HeroController.instance;
         hm.Hit(new HitInstance
         {
-            Source = _hero ? _hero.gameObject : null,
+            Source = hc ? hc.gameObject : null,
             AttackType = (AttackTypes)packet.Hit.AttackType,
             NailElement = (NailElements)packet.Hit.NailElement,
             DamageDealt = packet.Hit.DamageDealt,

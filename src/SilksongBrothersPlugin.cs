@@ -33,7 +33,7 @@ public partial class SilksongBrothersPlugin : BaseUnityPlugin
         var version = Utils.Version;
         Logger.LogInfo($"Plugin {Name}:{version} ({Id}) has loaded!");
         ModConfig.Bind(Config);
-        new Harmony("io.github.azazo1.silksongbrothers").PatchAll();
+        new Harmony(Constants.ModId).PatchAll();
         gameObject.AddComponent<MenuButtons>();
         // 添加了 canvas 之后才能在屏幕中显示文字.
         var cv = gameObject.AddComponent<Canvas>();
@@ -97,6 +97,7 @@ public partial class SilksongBrothersPlugin : BaseUnityPlugin
         Logger.LogInfo($"Plugin {Name} has been destroyed!");
         Utils.Logger = null;
         Instance = null;
+        new Harmony(Constants.ModId).UnpatchSelf();
     }
 
     public static void SpawnPopup(string text, Color color = default)

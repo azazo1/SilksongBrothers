@@ -10,6 +10,9 @@ public class Peer(string id, string name)
     public string Name { get; set; } = name;
 }
 
+/// <summary>
+/// 不存储自身的 peer id 和 name.
+/// </summary>
 public static class PeerRegistry
 {
     /// <summary>

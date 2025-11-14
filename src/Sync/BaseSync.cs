@@ -19,7 +19,7 @@ public abstract class BaseSync : MonoBehaviour
     /// <summary>
     /// 将 Sync 绑定到连接上.
     ///
-    /// 当连接断开, Sync 自动失效, 可以再次调用 Bind 使 Sync 重新生效.
+    /// 当连接断开, Sync 自动失效(<see cref="Unbind"/> 被调用), 可以再次调用 Bind 使 Sync 重新生效.
     /// </summary>
     /// <param name="connection">目标连接</param>
     public virtual void Bind(IConnection connection)

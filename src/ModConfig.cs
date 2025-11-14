@@ -8,20 +8,16 @@ public static class ModConfig
 {
     // Visuals
     public static float PlayerOpacity;
-    public static float CompassOpacity;
 
     // General
     public static KeyCode MultiplayerToggleKey;
+    public static KeyCode SwitchSpectatingPlayerPreviousKey;
+    public static KeyCode SwitchSpectatingPlayerNextKey;
     public static float PopupTextDuration;
     public static string StandalonePeerId = Utils.GeneratePeerId();
     public static KeyCode StandaloneServerToggleKey;
     public static string PlayerName = "player";
     public static int ServerHostChangeInterval;
-
-    // Audio
-    public static bool SyncSound;
-    public static bool SyncParticles;
-    public static float AudioRolloff;
 
     // Network
     public static string StandaloneServerAddress = $"localhost:{Constants.Port}";
@@ -35,16 +31,13 @@ public static class ModConfig
         // _ = config.Bind("Notice", "Restart to Take Effect", "", "以下设置可能需要重启游戏才能生效.").Value;
         // todo 监听 setting changes
         PlayerOpacity = config.Bind("Visuals", "Player Opacity", 0.7f, "Opacity of other players (0.0f = invisible, 1.0f = as opaque as yourself).").Value;
-        CompassOpacity = config.Bind("Visuals", "Compass Opacity", 0.7f, "Opacity of other players' compasses.").Value;
 
         MultiplayerToggleKey = config.Bind("General", "Toggle Key", KeyCode.F5, "Key used to toggle multiplayer.").Value;
+        SwitchSpectatingPlayerPreviousKey = config.Bind("General", "Switch Spectating Player Previous Key", KeyCode.LeftArrow, "观战状态下切换前一个观战玩家按键.").Value;
+        SwitchSpectatingPlayerNextKey = config.Bind("General", "Switch Spectating Player Next Key", KeyCode.LeftArrow, "观战状态下切换后一个观战玩家按键.").Value;
         PopupTextDuration = config.Bind("General", "Toast Time", 5.0f, "Time until toast messages hide (set this to 0 to disable toast).").Value;
         PlayerName = config.Bind("General", "Player Name", PlayerName, "你的玩家名, 将会在其他玩家游戏中显示.").Value;
         ServerHostChangeInterval = config.Bind("General", "Host Change Interval", 15000, "服务端 host 切换间隔(毫秒).").Value;
-
-        SyncSound = config.Bind("Audio", "Sync Audio", false, "Enable sound sync (experimental).").Value;
-        SyncParticles = config.Bind("Audio", "Sync Particles", false, "Enable particle sync (experimental).").Value;
-        AudioRolloff = Mathf.Clamp(config.Bind("Audio", "Audio distance rolloff", 50, "How quickly a sound gets quieter depending on distance").Value, 0, Mathf.Infinity);
 
         NetworkMode = config.Bind("Network", "Network Mode", NetworkMode.Standalone, "联机网络模式.").Value;
         StandaloneServerToggleKey = config.Bind("Network", "Standalone Server Toggle Key", KeyCode.F6, "独立服务器开关按键.").Value;

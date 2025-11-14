@@ -13,7 +13,7 @@ internal class Peer(string id, TcpClient client)
 {
     public string Id => id;
     public TcpClient Client { get; set; } = client;
-    public string? Scene { get; set; }
+    public bool Alive { get; set; } = true;
 }
 
 internal class PeerRegistry
@@ -38,6 +38,7 @@ internal class PeerRegistry
     private readonly Dictionary<TcpClient, string> _peersRev = new();
     public Dictionary<string, Peer>.KeyCollection PeerIds => _peers.Keys;
     public Dictionary<TcpClient, string>.KeyCollection Clients => _peersRev.Keys;
+    public Dictionary<string, Peer>.ValueCollection Peers => _peers.Values;
 
     /// <summary>
     /// (旧 Host, 新 Host), 保证调用的时候会有变化.
@@ -135,13 +136,11 @@ public class StandaloneServer
         _cts.Cancel(); // 初始是非 Running 状态.
     }
 
-    private delegate void PacketInitializer<T>(ref T packet) where T : Packet;
-
-    private static T CreatePacket<T>(PacketInitializer<T>? initialize = null) where T : Packet
+    private static T CreatePacket<T>(Action<T>? initialize = null) where T : Packet
     {
         var packet = Activator.CreateInstance<T>();
         packet.SrcPeer = Constants.ServerId;
-        initialize?.Invoke(ref packet);
+        initialize?.Invoke(packet);
         return packet;
     }
 
@@ -187,7 +186,7 @@ public class StandaloneServer
 
     private void OnHostChanged((string?, string?) changes)
     {
-        _ = SendPacket(CreatePacket<HostPeerPacket>((ref p) => { p.Host = changes.Item2; }));
+        _ = SendPacket(CreatePacket<HostPeerPacket>(p => { p.Host = changes.Item2; }));
     }
 
     private async Task ServerLoop()
@@ -268,8 +267,9 @@ public class StandaloneServer
             client.Close();
             if (peerId != null)
             {
-                await SendPacket(CreatePacket<PeerQuitPacket>((ref p) => { p.QuitPeer = peerId; }));
                 _peers.Remove(peerId);
+                await KillPlayer(peerId);
+                await SendPacket(CreatePacket<PeerQuitPacket>(p => { p.QuitPeer = peerId; }));
             }
         }
     }
@@ -286,18 +286,65 @@ public class StandaloneServer
             case SyncTimePacket:
                 await SendPacketToClient(CreatePacket<SyncTimePacket>(), client);
                 break;
-            case PeerQuitPacket: // 仅服务端可发送.
+            // 仅服务端可发送, 在这里拦截.
+            case PeerQuitPacket:
+            case AlivePlayersPacket:
             case HeartbeatPacket: // 无需响应.
                 break;
             case HostPeerPacket:
                 await SendPacketToClient(
-                    CreatePacket<HostPeerPacket>((ref p) => { p.Host = _peers.Host; }),
+                    CreatePacket<HostPeerPacket>(p => p.Host = _peers.Host),
                     client);
                 break;
+            case PlayerDeathPacket playerDeathPacket:
+            {
+                await KillPlayer(playerDeathPacket.DeadPeerId);
+                break;
+            }
+            case RespawnSetPacket respawnSetPacket:
+            {
+                await SendPacket(respawnSetPacket);
+                await ReviveAllPlayers();
+                break;
+            }
             default:
                 await SendPacket(packet);
                 break;
         }
+    }
+
+    private async Task KillPlayer(string peerId)
+    {
+        var peer = _peers.Query(peerId);
+        if (peer == null) return;
+        peer.Alive = false;
+        var packetToSend =
+            CreatePacket<PlayerDeathPacket>(p => { p.DeadPeerId = peerId; });
+        await SendPacket(packetToSend);
+        var packetToSend2 = CreatePacket<AlivePlayersPacket>(p => { p.AlivePlayers = GetAlivePlayers(); });
+        await SendPacket(packetToSend2);
+        if (packetToSend2.AlivePlayers?.Count == 0)
+        {
+            await ReviveAllPlayers();
+        }
+    }
+
+    /// <summary>
+    /// 此方法将所有观战玩家复活, 然后广播 <see cref="AlivePlayersPacket"/> 包.
+    /// </summary>
+    private async Task ReviveAllPlayers()
+    {
+        foreach (var peer in _peers.Peers)
+        {
+            peer.Alive = true;
+        }
+
+        await SendPacket(CreatePacket<AlivePlayersPacket>(p => { p.AlivePlayers = GetAlivePlayers(); }));
+    }
+
+    private List<string> GetAlivePlayers()
+    {
+        return _peers.Peers.Where(p => p.Alive).Select(p => p.Id).ToList();
     }
 
 
