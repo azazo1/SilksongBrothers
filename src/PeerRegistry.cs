@@ -33,33 +33,35 @@ public static class PeerRegistry
     /// <summary>
     /// peer id => Peer
     /// </summary>
-    private static readonly Dictionary<string, Peer> Peers = [];
+    private static readonly Dictionary<string, Peer> PeersMapping = [];
+
+    public static Dictionary<string, Peer>.ValueCollection Peers => PeersMapping.Values;
 
     public static void AddPeer(string id, string name)
     {
-        if (Peers.TryGetValue(id, out var peer))
+        if (PeersMapping.TryGetValue(id, out var peer))
         {
             var oldName = peer.Name;
             peer.Name = name;
-            Peers[id] = peer;
+            PeersMapping[id] = peer;
             _onPeerRenamed.Invoke((peer, oldName));
         }
 
         peer = new Peer(id, name);
-        Peers[id] = peer;
+        PeersMapping[id] = peer;
         _onPeerAdded.Invoke(peer);
     }
 
     public static void RemovePeer(string id)
     {
-        if (!Peers.TryGetValue(id, out var peer)) return;
+        if (!PeersMapping.TryGetValue(id, out var peer)) return;
         _onPeerRemoved.Invoke(peer);
-        Peers.Remove(id);
+        PeersMapping.Remove(id);
     }
 
     public static Peer? Query(string id)
     {
-        Peers.TryGetValue(id, out var peer);
+        PeersMapping.TryGetValue(id, out var peer);
         return peer;
     }
 

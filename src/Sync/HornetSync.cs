@@ -8,6 +8,8 @@ using SilksongBrothers.Components;
 using SilksongBrothers.Network;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+using Camera = UnityEngine.Camera;
 
 namespace SilksongBrothers.Sync;
 
@@ -31,6 +33,8 @@ public class HornetSync : BaseSync
     // peer id => game object
     private readonly Dictionary<string, GameObject> _playerObjects = new();
     private readonly Dictionary<string, tk2dSpriteAnimator> _playerAnimators = new();
+    private readonly Dictionary<string, GameObject> _playerNameTexts = new();
+    private readonly Dictionary<string, string> _playerScenes = new();
 
     private HornetSyncState _state = HornetSyncState.Normal;
 
@@ -45,6 +49,8 @@ public class HornetSync : BaseSync
     private List<string>? _alivePlayers;
 
     private Vector3 _lastSpectatingPosition;
+
+    private GameObject _mainMenuText;
 
     public override void Bind(IConnection connection)
     {
@@ -63,6 +69,13 @@ public class HornetSync : BaseSync
     public override void Unbind()
     {
         base.Unbind();
+        foreach (var text in _playerNameTexts.Values)
+        {
+            Destroy(text);
+        }
+
+        _playerNameTexts.Clear();
+
         PeerRegistry.RemovePeerRemovedHandler(OnPlayerLeave);
         _instance = null;
         if (_state == HornetSyncState.Spectator)
@@ -72,18 +85,35 @@ public class HornetSync : BaseSync
         }
     }
 
+    private bool IsInventoryOpen()
+    {
+        var invInp = FindFirstObjectByType<InventoryPaneInput>();
+        return invInp && invInp.isInInventory;
+    }
+
     private void OnPlayerLeave(Peer peer)
     {
-        // 另一方面, 玩家可能是在主界面中加入的, 并没有在游戏内加入.
-        if (!_playerObjects.TryGetValue(peer.Id, out var playerObject)) return;
-        Destroy(playerObject);
-        _playerObjects.Remove(peer.Id);
+        _playerAnimators.Remove(peer.Id);
+        if (_playerObjects.Remove(peer.Id, out var playerObject))
+        {
+            Destroy(playerObject);
+        }
+
+        if (!_playerNameTexts.Remove(peer.Id, out var nameText))
+        {
+            Destroy(nameText);
+        }
     }
 
     protected override void Update()
     {
         base.Update();
         if (Connection?.Connected != true) return;
+        var hc = HeroController.instance;
+        if (!hc) return;
+        if (!_mainMenuText)
+            _mainMenuText =
+                GameObject.Find("_UIManager/UICanvas/MainMenuScreen/MainMenuButtons/OptionsButton/Menu Button Text");
         if (_state == HornetSyncState.Spectator)
         {
             if (!_alivePlayers.IsNullOrEmpty())
@@ -95,8 +125,7 @@ public class HornetSync : BaseSync
                     _spectatingPlayerIdx += delta;
                     _spectatingPlayerIdx %= _alivePlayers!.Count;
 
-                    var hc = HeroController.instance;
-                    if (hc && hc.gm.GameState == GameState.PLAYING)
+                    if (hc.gm.GameState == GameState.PLAYING)
                     {
                         hc.transform.position = _lastSpectatingPosition;
                     }
@@ -114,11 +143,35 @@ public class HornetSync : BaseSync
             AvoidSpectatorState();
         }
 
+        var invOpen = IsInventoryOpen();
+        var playingState = hc.gm.GameState == GameState.PLAYING;
+        foreach (var text in _playerNameTexts.Values.Where(t => t))
+        {
+            text.SetActive(!invOpen && playingState);
+        }
+
+        var cam = Camera.main;
+        if (cam)
+        {
+            foreach (var peer in PeerRegistry.Peers)
+            {
+                if (!_playerObjects.TryGetValue(peer.Id, out var playerObject) || !playerObject) continue;
+                if (!_playerNameTexts.TryGetValue(peer.Id, out var nameText) || !nameText) continue;
+                if (!_playerScenes.TryGetValue(peer.Id, out var scene)) continue;
+                var sameScene = SceneManager.GetActiveScene().name == scene;
+                if (!sameScene)
+                    nameText.SetActive(false);
+                var vp = cam.WorldToViewportPoint(playerObject.transform.position + new Vector3(1.2f, 1.3f, 0f));
+                vp.x = Mathf.Clamp(vp.x, 0.05f, 0.95f);
+                vp.y = Mathf.Clamp(vp.y, 0.05f, 0.95f);
+                var rect = nameText.GetComponent<RectTransform>();
+                rect.position = cam.ViewportToScreenPoint(vp);
+            }
+        }
 
         try
         {
-            if (!hornetObject) hornetObject = GameObject.Find("Hero_Hornet");
-            if (!hornetObject) hornetObject = GameObject.Find("Hero_Hornet(Clone)");
+            if (!hornetObject) hornetObject = hc.gameObject;
             if (!hornetObject) return;
             if (!hornetRigidbody)
                 hornetRigidbody = hornetObject.GetComponent<Rigidbody2D>();
@@ -180,7 +233,7 @@ public class HornetSync : BaseSync
 
             if (!_playerObjects.TryGetValue(peerId, out var playerObject) || !playerObject)
             {
-                playerObject = new GameObject { name = $"SilksongBrother - {peer.Id}" };
+                playerObject = new GameObject { name = $"SilksongBrothers - {peer.Id}" };
                 playerObject.transform.SetParent(transform);
                 playerObject.transform.position = new Vector3(packet.PosX, packet.PosY,
                     hornetObject.transform.position.z + 0.001f);
@@ -208,11 +261,29 @@ public class HornetSync : BaseSync
                 playerInterpolator.SetVelocity(new Vector3(packet.VelocityX, packet.VelocityY, 0));
             }
 
+            if (!_playerNameTexts.TryGetValue(peer.Id, out var nameText) || !nameText)
+            {
+                nameText = new GameObject { name = $"SilksongBrothers - {peer.Id} - Name" };
+                var canvas = FindFirstObjectByType<Canvas>();
+                nameText.transform.SetParent(canvas.transform);
+                var rect = nameText.AddComponent<RectTransform>();
+                rect.sizeDelta = new Vector2(100, 100);
+                // rect.anchoredPosition = new Vector2(0, -10);
+                var text = nameText.AddComponent<Text>();
+                text.font = _mainMenuText.GetComponent<Text>().font;
+                text.fontSize = 20;
+                text.text = peer.Name;
+                _playerNameTexts[peer.Id] = nameText;
+            }
+
             playerObject.transform.position = new Vector3(packet.PosX, packet.PosY,
                 hornetObject.transform.position.z + 0.001f);
             playerObject.transform.localScale = new Vector3(packet.ScaleX, 1, 1);
             playerObject.SetActive(packet.Scene == SceneManager.GetActiveScene().name);
             playerInterpolator.SetVelocity(new Vector3(packet.VelocityX, packet.VelocityY, 0));
+
+            _playerScenes[peer.Id] = packet.Scene;
+
             if (IsSpectating(packet.SrcPeer) && hornetObject)
             {
                 hornetObject.transform.position = playerObject.transform.position;
@@ -547,6 +618,7 @@ public class HornetSync : BaseSync
             }
         }
     }
+
     // todo spectator 模式禁止玩家发出声音.
     // todo 显示同伴血量
 }
