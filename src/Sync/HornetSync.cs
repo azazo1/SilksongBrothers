@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using GlobalEnums;
 using GlobalSettings;
 using HarmonyLib;
@@ -95,6 +94,12 @@ public class HornetSync : BaseSync
                     delta -= Input.GetKeyDown(ModConfig.SwitchSpectatingPlayerPreviousKey) ? 1 : 0;
                     _spectatingPlayerIdx += delta;
                     _spectatingPlayerIdx %= _alivePlayers!.Count;
+
+                    var hc = HeroController.instance;
+                    if (hc)
+                    {
+                        hc.transform.position = _lastSpectatingPosition;
+                    }
                 }
                 else
                 {
@@ -103,11 +108,6 @@ public class HornetSync : BaseSync
             }
 
             KeepSpectatorState();
-            var hc = HeroController.instance;
-            if (hc)
-            {
-                hc.transform.position = _lastSpectatingPosition;
-            }
         }
         else
         {
@@ -256,32 +256,6 @@ public class HornetSync : BaseSync
         gm.ChangeToScene(scene, null, 0);
     }
 
-    // todo 判断是否需要在切换场景时使用这个方法.
-    private static void StopAllSceneMusic(GameManager gameManager)
-    {
-        gameManager.AudioManager.StopAndClearMusic();
-        gameManager.AudioManager.StopAndClearAtmos();
-        var audio = gameManager.AudioManager.transform;
-        var music = audio ? audio.Find("Music") : null;
-        if (!music) return;
-        var restArea = music.Find("RestArea");
-        var playMakerFsm = restArea ? restArea.GetComponent<PlayMakerFSM>() : null;
-        if (playMakerFsm)
-        {
-            playMakerFsm.fsm.Finished = false;
-            playMakerFsm.SendEventSafe("REST AREA MUSIC STOP FAST");
-        }
-
-        var transform4 = music.Find("FleaCaravan");
-        var playMakerFsm2 = transform4 ? transform4.GetComponent<PlayMakerFSM>() : null;
-        if (playMakerFsm2)
-        {
-            playMakerFsm2.fsm.Finished = false;
-            playMakerFsm2.SendEventSafe("FLEA MUSIC STOP FAST");
-        }
-    }
-
-    // animation
     private void OnHornetAnimationPacket(HornetAnimationPacket packet)
     {
         try
@@ -444,17 +418,7 @@ public class HornetSync : BaseSync
         }
     }
 
-    // todo 死亡之后发公告, 公告中报告存活的人数.
-    // todo 死亡之后进入幽灵状态
-    // todo 幽灵状态时自身隐身 MeshRendered.enabled = false.
-    // todo 幽灵状态下不发送自身的位置信息
-    // todo 幽灵状态下不接受任何键盘输入, 并且提供观战同步视角.
-    // todo 观战同步视角能够跟随其他玩家切换场景 (不需要特殊的切换 scene packet, 直接用 hornetpospacket).
-    // todo 观战同步视角能够选择当前存活的玩家.
-    // todo 存活玩家坐长椅的时候复活. (需要一个坐长椅 Packet)
-    // todo 所有玩家同时进入幽灵状态的时候真正死亡, 所有人的茧都掉落在最后一个存活的玩家死亡位置(这点其实不需要特别设置, 因为观战视角就是剩余的玩家位置).
     // todo 幽灵视角下在屏幕中央添加符合游戏字体的文字提示当前在幽灵状态, 并提示左右移动键切换观战玩家.
-    // todo 当存活玩家断连时, 算作死亡, 剩余的观战玩家在幽灵状态下死亡.
     // todo 同步机关, 以支持完整的观战视角.
     [HarmonyPatch(typeof(PlayerData), nameof(PlayerData.TakeHealth))]
     public static class PatchTakeHealth
@@ -601,6 +565,5 @@ public class HornetSync : BaseSync
             }
         }
     }
-    // todo spectator 模式之下进入新的场景切换都要禁用输入和隐身.
     // todo spectator 模式禁止玩家发出声音.
 }
