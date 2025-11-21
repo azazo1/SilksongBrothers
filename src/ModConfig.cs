@@ -24,6 +24,7 @@ public static class ModConfig
     public static NetworkMode NetworkMode;
     public static ushort StandaloneServerPort;
     public static long RealtimeTimeout;
+    public static bool WantToBeHost;
 
     public static void Bind(ConfigFile config)
     {
@@ -45,6 +46,7 @@ public static class ModConfig
         StandaloneServerAddress = config.Bind("Network", "Standalone Server Address", StandaloneServerAddress, "客户端连接的独立服务器地址 (ip:port).").Value;
         StandalonePeerId = config.Bind("Network", "Standalone Peer ID", StandalonePeerId, "独立服务器模式下您的玩家 ID, 用于标识您自己, 如果玩家间重复可能会出现同步问题.").Value;
         RealtimeTimeout = config.Bind("Network", "Realtime Timeout", 1000, "实时包超时时间(ms)").Value;
+        WantToBeHost = config.Bind("Network", "Want to Be Host", true, "是否希望成为可能的 Host.").Value;
         // @formatter:on
     }
 }

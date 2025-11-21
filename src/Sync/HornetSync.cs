@@ -620,5 +620,6 @@ public class HornetSync : BaseSync
     }
 
     // todo spectator 模式禁止玩家发出声音.
-    // todo 显示同伴血量
+    // todo 显示同伴血量 (试试看能不能直接添加 HealthManager 配合血条 mod)
+    // todo 拿蓬蓬裙那个 npc 的场景观战无法正常同步.
 }

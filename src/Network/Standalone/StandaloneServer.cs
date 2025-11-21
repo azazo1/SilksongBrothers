@@ -14,6 +14,7 @@ internal class Peer(string id, TcpClient client)
     public string Id => id;
     public TcpClient Client { get; set; } = client;
     public bool Alive { get; set; } = true;
+    public bool WantToBeHost { get; set; } = true;
 }
 
 internal class PeerRegistry
@@ -50,7 +51,7 @@ internal class PeerRegistry
     /// <summary>
     /// 向记录中添加新的 Peer 或者更新现有的 Peer 连接.
     /// </summary>
-    public void Update(string id, TcpClient client)
+    public void Update(string id, TcpClient client, bool? wantToBeHost = null)
     {
         if (_peers.IsNullOrEmpty())
         {
@@ -64,6 +65,8 @@ internal class PeerRegistry
             _peersRev.Remove(peer.Client);
             peer.Client = client;
             _peersRev.Add(client, id);
+            if (wantToBeHost != null)
+                peer.WantToBeHost = (bool)wantToBeHost;
         }
         else
         {
@@ -109,7 +112,9 @@ internal class PeerRegistry
             return;
         }
 
-        var alivePeers = Peers.Where(p => p.Alive).ToList();
+        var alivePeers = Peers.Where(p => p.Alive && p.WantToBeHost).ToList();
+        if (alivePeers.IsNullOrEmpty())
+            alivePeers = Peers.Where(p => p.Alive).ToList();
         var idx = RandomNumberGenerator.GetInt32(alivePeers.Count);
         Host = alivePeers[idx].Id;
     }
@@ -283,7 +288,7 @@ public class StandaloneServer
         switch (packet)
         {
             case PeerIdPacket peerIdPacket:
-                _peers.Update(peerIdPacket.SrcPeer, client);
+                _peers.Update(peerIdPacket.SrcPeer, client, peerIdPacket.WantToBeHost);
                 await SendPacket(peerIdPacket);
                 break;
             case SyncTimePacket:

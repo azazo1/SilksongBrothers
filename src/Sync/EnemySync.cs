@@ -129,7 +129,7 @@ public class EnemySync : BaseSync
     private bool IsHost => _host != null && _host == Connection?.PeerId;
     private static EnemySync _instance;
 
-    protected override float TriggerFrequency => 15.0f;
+    protected override float TriggerFrequency => 30.0f;
 
     private static string CurrentSceneName => SceneManager.GetActiveScene().name;
 
@@ -348,7 +348,6 @@ public class EnemySync : BaseSync
                     IsHeroDamage = true
                 }
             };
-            Utils.Logger?.LogDebug("Try sending attack request packet...");
             _instance.Connection?.Send(attackRequest);
         }
 
@@ -368,7 +367,6 @@ public class EnemySync : BaseSync
                 Scene = SceneManager.GetActiveScene().name
             };
             if (!_instance) return;
-            Utils.Logger?.LogDebug("Try sending enemy health packet...");
             _instance.Connection?.Send(packet);
         }
     }

@@ -93,6 +93,11 @@ public partial class PeerIdPacket : Packet
     public Version Version = Utils.Version;
 
     /// <summary>
+    /// 此 Peer 是否想要成为可能的 Host, 当游戏中没有希望成为 Host 的 peer 时, 服务器将忽视此字段.
+    /// </summary>
+    public bool WantToBeHost;
+
+    /// <summary>
     /// 标记此包是否需要回复, 防止无尽的递归回复.
     /// </summary>
     public bool NeedResponse;
@@ -101,6 +106,7 @@ public partial class PeerIdPacket : Packet
     {
         Name = ModConfig.PlayerName;
         NeedResponse = needResponse;
+        WantToBeHost = ModConfig.WantToBeHost;
     }
 }
 
@@ -187,11 +193,6 @@ public partial class EnemyHealthPacket : Packet
     public bool InCombat;
     public int Hp;
     public bool IsDead;
-
-    public EnemyHealthPacket()
-    {
-        IsRealtime = true;
-    }
 }
 
 [MemoryPackable]
@@ -200,11 +201,6 @@ public partial class EnemyFsmPacket : Packet
     public string Id;
     public string Scene;
     public string StateName;
-
-    public EnemyFsmPacket()
-    {
-        IsRealtime = true;
-    }
 }
 
 [MemoryPackable]
